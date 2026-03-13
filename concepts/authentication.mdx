@@ -1,0 +1,426 @@
+---
+title: "Authentication"
+description: "JWT authentication, user registration, and session management in the Ecommerce Backend API"
+---
+
+## Overview
+
+The Ecommerce Backend API uses JWT (JSON Web Tokens) for stateless authentication. The authentication system includes user registration with email verification, secure password management, and session handling.
+
+## JWT Authentication Flow
+
+### Token Generation
+
+When a user successfully logs in, the system generates a JWT token that expires after 2 hours:
+
+```java src/main/java/ar/edu/uade/ecommerce/Security/JwtUtil.java
+@Component
+public class JwtUtil {
+    private final long EXPIRATION_TIME = 7200000; // 2 hours
+    private Key signingKey;
+    
+    public String generateToken(String username) {
+        return Jwts.builder()
+            .setSubject(username)
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+            .signWith(signingKey, SignatureAlgorithm.HS512)
+            .compact();
+    }
+}
+```
+
+<Note>
+The JWT secret is configured via the `JWT_SECRET` environment variable and must be at least 512 bits for HS512 algorithm.
+</Note>
+
+### Token Validation
+
+The system validates tokens on each authenticated request:
+
+```java src/main/java/ar/edu/uade/ecommerce/Security/JwtUtil.java
+public boolean validateToken(String token, String username) {
+    String extractedUsername = extractUsername(token);
+    return (extractedUsername.equals(username) && !isTokenExpired(token));
+}
+
+private boolean isTokenExpired(String token) {
+    Claims claims = getClaims(token);
+    return claims.getExpiration().before(new Date());
+}
+```
+
+### Login Endpoint
+
+The `/auth/login` endpoint authenticates users and returns a JWT token:
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/AuthController.java
+@PostMapping("/login")
+public ResponseEntity<UserLoginResponseDTO> login(@RequestBody Map<String, String> request) {
+    String email = request.get("email");
+    String password = request.get("password");
+    
+    // Validate credentials and generate token
+    String token = authService.login(email, password);
+    User user = authService.getUserByEmail(email);
+    
+    // Mark session as active
+    user.setSessionActive(true);
+    authService.saveUser(user);
+    
+    // Return user data and bearer token
+    UserLoginResponseDTO response = new UserLoginResponseDTO();
+    response.setSuccess(true);
+    response.setBearer_token(token);
+    response.setUser(userDTO);
+    
+    return ResponseEntity.ok(response);
+}
+```
+
+**Request Example:**
+
+```json
+POST /auth/login
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response Example:**
+
+```json
+{
+  "success": true,
+  "bearer_token": "eyJhbGciOiJIUzUxMiJ9...",
+  "user": {
+    "id": 1,
+    "name": "John",
+    "lastname": "Doe",
+    "email": "user@example.com",
+    "addresses": []
+  }
+}
+```
+
+<Warning>
+The login endpoint requires both email and password. Missing or blank values will return a 400 Bad Request response.
+</Warning>
+
+### Authentication Service Logic
+
+The `AuthService` validates credentials and handles exceptions:
+
+```java src/main/java/ar/edu/uade/ecommerce/Service/AuthServiceImpl.java
+@Override
+public String login(String email, String password) {
+    User user = userRepository.findByEmail(email);
+    
+    if (user == null) {
+        throw new UserNotFoundException("Usuario no encontrado");
+    }
+    
+    if (!passwordEncoder.matches(password, user.getPassword())) {
+        throw new InvalidCredentialsException("Credenciales inválidas");
+    }
+    
+    if (!user.isAccountActive()) {
+        throw new AccountNotVerifiedException(
+            "La cuenta no está verificada. Por favor verifica tu correo electrónico."
+        );
+    }
+    
+    return jwtUtil.generateToken(user.getEmail());
+}
+```
+
+<Accordion title="Exception Handling">
+  - **UserNotFoundException**: Returns 404 when email doesn't exist
+  - **InvalidCredentialsException**: Returns 401 for incorrect password
+  - **AccountNotVerifiedException**: Returns 403 if email not verified
+</Accordion>
+
+## User Registration
+
+### Registration Flow
+
+New users must verify their email address before logging in:
+
+1. User submits registration data
+2. System creates inactive account with encrypted password
+3. 8-character verification token is generated (15-minute expiration)
+4. Verification email is sent
+5. User submits token via `/auth/verify-email`
+6. Account is activated
+
+### Registration Endpoint
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/AuthController.java
+@PostMapping("/register")
+public ResponseEntity<?> register(@RequestBody RegisterUserDTO registerUserDTO) {
+    // Validate name contains at least one letter
+    String name = registerUserDTO.getName();
+    if (name == null || !name.matches(".*[A-Za-zÁÉÍÓÚáéíóúÑñ].*")) {
+        return ResponseEntity.badRequest()
+            .body(Map.of("error", "El nombre debe contener al menos una letra"));
+    }
+    
+    // Check if user already exists
+    User existingUser = authService.getUserByEmail(registerUserDTO.getEmail());
+    if (existingUser != null) {
+        if (existingUser.isAccountActive()) {
+            throw new IllegalStateException("La cuenta ya está activa. Inicia sesión.");
+        } else {
+            // Resend verification token
+            authService.resendVerificationToken(existingUser);
+            return ResponseEntity.ok(
+                "La cuenta ya existe pero no está activa. Se ha reenviado el token."
+            );
+        }
+    }
+    
+    User newUser = authService.registerDTO(registerUserDTO);
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
+}
+```
+
+**Request Example:**
+
+```json
+POST /auth/register
+{
+  "name": "John",
+  "lastname": "Doe",
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+### Token Generation and Email Sending
+
+```java src/main/java/ar/edu/uade/ecommerce/Service/AuthServiceImpl.java
+public User registerDTO(RegisterUserDTO registerUserDTO) {
+    User user = new User();
+    user.setEmail(registerUserDTO.getEmail());
+    user.setPassword(passwordEncoder.encode(registerUserDTO.getPassword()));
+    user.setRole("USER");
+    user.setAccountActive(false);
+    
+    User savedUser = userRepository.save(user);
+    
+    // Generate 8-character alphanumeric token
+    String tokenStr = generateToken();
+    Date expiration = new Date(System.currentTimeMillis() + 15 * 60 * 1000);
+    
+    Token token = new Token();
+    token.setUser(savedUser);
+    token.setToken(tokenStr);
+    token.setExpirationDate(expiration);
+    tokenRepository.save(token);
+    
+    sendVerificationEmail(savedUser.getEmail(), tokenStr);
+    return savedUser;
+}
+
+String generateToken() {
+    String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    StringBuilder sb = new StringBuilder();
+    Random rnd = new Random();
+    for (int i = 0; i < 8; i++) {
+        sb.append(chars.charAt(rnd.nextInt(chars.length())));
+    }
+    return sb.toString();
+}
+```
+
+### Email Verification
+
+Users must submit their email and the token received via email:
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/AuthController.java
+@PostMapping("/verify-email")
+public ResponseEntity<Map<String, String>> verifyEmail(@RequestBody Map<String, String> request) {
+    String email = request.get("email");
+    String token = request.get("token");
+    
+    boolean verified = authService.verifyEmailToken(email, token);
+    if (verified) {
+        return ResponseEntity.ok(
+            Map.of("message", "Cuenta verificada exitosamente. Ya puedes iniciar sesión.")
+        );
+    } else {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(Map.of("error", "El token ingresado no es el correcto"));
+    }
+}
+```
+
+**Verification Process:**
+
+```java src/main/java/ar/edu/uade/ecommerce/Service/AuthServiceImpl.java
+@Transactional
+public boolean verifyEmailToken(String email, String tokenStr) {
+    User user = userRepository.findByEmail(email);
+    Optional<Token> tokenOpt = tokenRepository.findByToken(tokenStr);
+    
+    if (tokenOpt.isEmpty()) return false;
+    
+    Token token = tokenOpt.get();
+    
+    // Verify token belongs to user
+    if (!token.getUser().getId().equals(user.getId())) return false;
+    
+    // Check expiration
+    if (token.getExpirationDate().before(new Date())) {
+        tokenRepository.deleteByToken(tokenStr);
+        return false;
+    }
+    
+    // Activate account and cleanup tokens
+    user.setAccountActive(true);
+    userRepository.save(user);
+    tokenRepository.deleteByUserId(user.getId());
+    
+    return true;
+}
+```
+
+<Note>
+Verification tokens expire after 15 minutes. If a token expires, users can request a new one by attempting to register again with the same email.
+</Note>
+
+## Password Reset
+
+The system provides a secure password reset mechanism via email tokens.
+
+### Request Password Reset
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/PasswordResetController.java
+@PostMapping("/password/request")
+public ResponseEntity<?> requestPasswordReset(@RequestBody Map<String, String> body) {
+    String email = body.get("email");
+    try {
+        passwordResetService.requestPasswordReset(email);
+        return ResponseEntity.ok(
+            Map.of("message", "Se ha enviado un correo con el código de recuperación")
+        );
+    } catch (RuntimeException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(Map.of("error", "El email no pertenece a ninguna cuenta"));
+    }
+}
+```
+
+### Validate Reset Token
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/PasswordResetController.java
+@PostMapping("/password/validate")
+public ResponseEntity<?> validateToken(@RequestBody Map<String, String> body) {
+    String email = body.get("email");
+    String token = body.get("token");
+    
+    boolean valid = passwordResetService.validateToken(email, token);
+    if (valid) {
+        return ResponseEntity.ok(Map.of("message", "Token válido"));
+    } else {
+        return ResponseEntity.badRequest()
+            .body(Map.of("error", "El token enviado no es correcto"));
+    }
+}
+```
+
+### Change Password
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/PasswordResetController.java
+@PostMapping("/password/change")
+public ResponseEntity<?> changePassword(@RequestBody Map<String, String> body) {
+    String email = body.get("email");
+    String token = body.get("token");
+    String newPassword = body.get("newPassword");
+    
+    passwordResetService.changePassword(email, token, newPassword);
+    return ResponseEntity.ok(Map.of("message", "Contraseña cambiada exitosamente"));
+}
+```
+
+## Session Management
+
+The system tracks active sessions via the `sessionActive` field on the User entity.
+
+### Logout
+
+Users can explicitly end their session:
+
+```java src/main/java/ar/edu/uade/ecommerce/Controllers/AuthController.java
+@PostMapping("/logout")
+public ResponseEntity<String> logout(@RequestHeader("Authorization") String authHeader) {
+    String token = authHeader.replace("Bearer ", "");
+    String email = authService.getEmailFromToken(token);
+    
+    User user = authService.getUserByEmail(email);
+    user.setSessionActive(false);
+    authService.saveUser(user);
+    
+    return ResponseEntity.ok("Sesión cerrada correctamente");
+}
+```
+
+<Warning>
+JWT tokens remain valid until expiration even after logout. The `sessionActive` flag is for application-level tracking and can be used to implement additional validation in secured endpoints.
+</Warning>
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Password Encryption" icon="shield">
+    Passwords are hashed using BCrypt via Spring Security's `PasswordEncoder`
+  </Card>
+  <Card title="Token Expiration" icon="clock">
+    JWT tokens expire after 2 hours, verification tokens after 15 minutes
+  </Card>
+  <Card title="Email Verification" icon="envelope">
+    Accounts must be verified before login to prevent fake registrations
+  </Card>
+  <Card title="Secure Headers" icon="lock">
+    Use `Authorization: Bearer <token>` header for authenticated requests
+  </Card>
+</CardGroup>
+
+## Email Configuration
+
+The system uses Gmail SMTP for sending verification and password reset emails:
+
+```properties
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=${SPRING_MAIL_USERNAME}
+spring.mail.password=${SPRING_MAIL_PASSWORD}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+```
+
+**Verification Email Template:**
+
+```java src/main/java/ar/edu/uade/ecommerce/Service/AuthServiceImpl.java
+void sendVerificationEmail(String to, String token) {
+    SimpleMailMessage message = new SimpleMailMessage();
+    message.setFrom("CompuMundoHiperMegaRed <no-reply@compumundo.com>");
+    message.setTo(to);
+    message.setSubject("Verificación de correo electrónico");
+    message.setText("Tu código de verificación es: " + token + 
+                    "\nEste código expira en 15 minutos.");
+    mailSender.send(message);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/api/auth/login">
+    Explore authentication endpoints in detail
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Learn about the overall system design
+  </Card>
+</CardGroup>

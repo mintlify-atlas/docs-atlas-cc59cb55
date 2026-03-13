@@ -1,80 +1,288 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get the Ecommerce Backend API running in minutes with Docker Compose
 ---
 
-## Get started in three steps
+## Get Started Quickly
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This quickstart guide will have you running the Ecommerce Backend API with Keycloak authentication in under 5 minutes using Docker Compose.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This quickstart uses Docker Compose to run Keycloak for authentication. The main API application will run locally on your machine.
 </Note>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Docker** and **Docker Compose** installed
+- **Java 17** or higher installed
+- **Maven 3.6+** installed
+- **MySQL** database running (or use the configuration below for a local setup)
+- **Apache Kafka** running on `localhost:9092` (or configure `KAFKA_BOOTSTRAP` env variable)
+
+<Steps>
+
+### Clone the Repository
+
+First, clone the repository and navigate to the project directory:
+
+```bash
+git clone <repository-url>
+cd ecommerce-backend
+```
+
+### Start Keycloak with Docker Compose
+
+The project includes a `docker-compose.yml` file that sets up Keycloak with a pre-configured realm:
+
+<CodeGroup>
+```yaml docker-compose.yml
+version: '3.8'
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.4
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_IMPORT: /opt/keycloak/data/import/realm-export.json
+    command: ["start-dev"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/ecommerce"]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+```
+
+```bash Start Keycloak
+docker-compose up -d
+```
+</CodeGroup>
+
+<Note>
+  Keycloak will be available at `http://localhost:8080` with credentials `admin/admin`. The realm `ecommerce` and client `ecommerce-module` are automatically imported.
+</Note>
+
+### Configure Environment Variables
+
+Create a `.env` file or export these environment variables:
+
+```bash .env
+# Server Configuration
+SERVER_PORT=8081
+
+# Database Configuration
+SPRING_DATASOURCE_URL=localhost:3306/ecommerce
+SPRING_DATASOURCE_USERNAME=your_db_user
+SPRING_DATASOURCE_PASSWORD=your_db_password
+
+# JWT Secret (use a strong secret in production)
+JWT_SECRET=your-secret-key-here-min-256-bits
+
+# Email Configuration (Gmail SMTP)
+SPRING_MAIL_USERNAME=your-email@gmail.com
+SPRING_MAIL_PASSWORD=your-app-password
+
+# Keycloak Configuration
+KEYCLOAK_TOKEN_URL=http://localhost:8080/realms/ecommerce/protocol/openid-connect/token
+KEYCLOAK_CLIENT_SECRET=ecommerce-secret
+
+# Kafka Configuration
+KAFKA_BOOTSTRAP=localhost:9092
+KAFKA_USERNAME=your-kafka-user
+KAFKA_PASSWORD=your-kafka-password
+
+# Core API (Communication Service)
+CORE_API_URL=http://localhost:8086
+KAFKA_MIDDLEWARE_URL=http://localhost:8090
+```
+
+<Warning>
+  Never commit your `.env` file to version control. Add it to `.gitignore` to keep your secrets safe.
+</Warning>
+
+### Build the Application
+
+Build the Spring Boot application using Maven:
+
+```bash
+mvn clean package -DskipTests
+```
+
+The compiled JAR will be created at `target/app.jar`.
+
+### Run the Application
+
+Start the Spring Boot application:
+
+```bash
+java -jar target/app.jar
+```
+
+Or use the Maven Spring Boot plugin:
+
+```bash
+mvn spring-boot:run
+```
+
+The API will start on `http://localhost:8081/api`.
+
+<Note>
+  Wait for the startup logs to show "Started EcommerceApplication" before making requests.
+</Note>
+
+### Make Your First Request
+
+Now let's test the API by registering a user and logging in:
+
+<CodeGroup>
+```bash Register a User
+curl -X POST http://localhost:8081/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John",
+    "lastname": "Doe",
+    "email": "john.doe@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+```json Response
+{
+  "message": "Fuiste registrado satisfactoriamente, revisa tu casilla de correo para ingresar luego el token para activar la cuenta",
+  "user": {
+    "id": 1,
+    "name": "John",
+    "lastname": "Doe",
+    "email": "john.doe@example.com"
+  }
+}
+```
+</CodeGroup>
+
+<Note>
+  After registration, you'll need to verify your email using the token sent to your inbox before you can log in.
+</Note>
+
+### Verify Email and Login
+
+Verify your email with the token received:
+
+```bash
+curl -X POST http://localhost:8081/api/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john.doe@example.com",
+    "token": "your-verification-token"
+  }'
+```
+
+Then log in to get your JWT token:
+
+<CodeGroup>
+```bash Login Request
+curl -X POST http://localhost:8081/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john.doe@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+```json Response
+{
+  "success": true,
+  "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 1,
+    "name": "John",
+    "lastname": "Doe",
+    "email": "john.doe@example.com",
+    "addresses": []
+  }
+}
+```
+</CodeGroup>
+
+### Fetch Products
+
+Use the JWT token to access protected endpoints:
+
+<CodeGroup>
+```bash Get Products
+curl -X GET http://localhost:8081/api/products \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```bash Get Product by ID
+curl -X GET http://localhost:8081/api/products/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</CodeGroup>
+
+</Steps>
+
+## Next Steps
+
+Congratulations! You now have the Ecommerce Backend API running locally.
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Learn about detailed installation options and configuration
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore all available API endpoints
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Deep dive into JWT and Keycloak authentication
+  </Card>
+  
+  <Card title="Events & Kafka" icon="signal-stream" href="/concepts/event-driven">
+    Learn about event-driven architecture and Kafka integration
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Keycloak not starting">
+    Check that port 8080 is not in use by another application. You can change the port mapping in `docker-compose.yml`:
+    
+    ```yaml
+    ports:
+      - "8888:8080"  # Map to different host port
+    ```
+    
+    Then update `KEYCLOAK_TOKEN_URL` to use the new port.
+  </Accordion>
+  
+  <Accordion title="Database connection errors">
+    Ensure MySQL is running and the credentials in your `.env` file are correct. Test the connection:
+    
+    ```bash
+    mysql -h localhost -u your_db_user -p ecommerce
+    ```
+  </Accordion>
+  
+  <Accordion title="Kafka connection errors">
+    Verify Kafka is running on the configured bootstrap server. The application will fail to start if Kafka is unreachable. Check logs for:
+    
+    ```
+    Failed to create AdminClient with bootstrap servers: localhost:9092
+    ```
+  </Accordion>
+  
+  <Accordion title="Port 8081 already in use">
+    Change the `SERVER_PORT` environment variable to use a different port:
+    
+    ```bash
+    export SERVER_PORT=8082
+    ```
+  </Accordion>
+</AccordionGroup>

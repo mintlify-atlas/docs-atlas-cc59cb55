@@ -1,0 +1,103 @@
+---
+title: 'User Update Operations'
+description: 'Additional user update operations including account management'
+---
+
+## Disable User Account
+
+<RequestExample>
+```http
+PUT /user/disable
+```
+</RequestExample>
+
+Disables the authenticated user's account by removing their email and setting the account to inactive.
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Response
+
+Returns the updated user object with `email` set to null and `accountActive` set to false.
+
+<ResponseField name="id" type="integer">
+  User's unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="lastname" type="string">
+  User's last name
+</ResponseField>
+
+<ResponseField name="email" type="null">
+  Will be null after disabling
+</ResponseField>
+
+<ResponseField name="accountActive" type="boolean">
+  Will be false after disabling
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://api.example.com/user/disable \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/user/disable', {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 1,
+  "name": "John",
+  "lastname": "Doe",
+  "email": null,
+  "role": "user",
+  "accountActive": false,
+  "sessionActive": true,
+  "addresses": []
+}
+```
+
+<Warning>
+  This operation effectively disables the user's account. The email is removed and the account is marked as inactive. Use with caution as this may prevent the user from logging in again.
+</Warning>
+
+---
+
+## Authentication Requirements
+
+All user update endpoints require:
+
+1. A valid Bearer token in the Authorization header
+2. The user's session to be active (`sessionActive: true`)
+3. The token to correspond to an existing user account
+
+### Error Responses
+
+<ResponseField name="401 Unauthorized" type="string">
+  Returned when authentication fails or session is inactive
+</ResponseField>
+
+```json
+"Usuario no logueado"
+```

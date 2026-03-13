@@ -1,0 +1,127 @@
+---
+title: "Update Cart Item"
+api: "PATCH /cart/item/{id}"
+---
+
+<Warning>
+  This endpoint is not implemented in the current CartController or CartItemController. 
+  Cart item updates are not directly supported via a dedicated endpoint.
+</Warning>
+
+## Alternative Approach
+
+To modify cart items, you should:
+
+1. **Delete the existing cart** using `DELETE /cart/{id}`
+2. **Create a new cart** with updated items using `POST /cart`
+
+## Recommended Workflow
+
+```mermaid
+graph LR
+    A[Get Current Cart] --> B[Delete Cart]
+    B --> C[Create New Cart]
+    C --> D[New Purchase Created]
+```
+
+### Step 1: Retrieve Current Cart
+
+Use `GET /cart/{id}` to get the current cart details.
+
+### Step 2: Delete Current Cart
+
+Use `DELETE /cart/{id}` to remove the existing cart.
+
+### Step 3: Create New Cart
+
+Use `POST /cart` with the modified items to create a new cart and purchase.
+
+## Why No Direct Update?
+
+The cart system is designed around purchase reservations. Each cart creation:
+- Reserves product stock immediately
+- Creates a pending purchase with a 4-hour expiration
+- Validates all products and quantities
+
+Modifying items would require complex stock management and reservation updates, so the API enforces a delete-and-recreate pattern for cart modifications.
+
+## Code Example
+
+<CodeGroup>
+```javascript JavaScript
+// Get current cart
+const currentCart = await fetch('https://api.example.com/cart/1', {
+  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+}).then(r => r.json());
+
+// Modify items (e.g., change quantity)
+const updatedItems = currentCart.items.map(item => {
+  if (item.product.id === 10) {
+    return { ...item, quantity: 3 }; // Update quantity
+  }
+  return item;
+});
+
+// Delete old cart
+await fetch('https://api.example.com/cart/1', {
+  method: 'DELETE',
+  headers: { 'Authorization': 'Bearer YOUR_TOKEN' }
+});
+
+// Create new cart with updated items
+const newPurchase = await fetch('https://api.example.com/cart', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    items: updatedItems.map(item => ({
+      product: { id: item.product.id },
+      quantity: item.quantity
+    }))
+  })
+}).then(r => r.json());
+
+console.log('New purchase created:', newPurchase);
+```
+
+```python Python
+import requests
+
+headers = {'Authorization': 'Bearer YOUR_TOKEN'}
+
+# Get current cart
+response = requests.get('https://api.example.com/cart/1', headers=headers)
+current_cart = response.json()
+
+# Modify items
+updated_items = []
+for item in current_cart['items']:
+    if item['product']['id'] == 10:
+        item['quantity'] = 3  # Update quantity
+    updated_items.append({
+        'product': {'id': item['product']['id']},
+        'quantity': item['quantity']
+    })
+
+# Delete old cart
+requests.delete('https://api.example.com/cart/1', headers=headers)
+
+# Create new cart
+response = requests.post(
+    'https://api.example.com/cart',
+    headers={**headers, 'Content-Type': 'application/json'},
+    json={'items': updated_items}
+)
+
+new_purchase = response.json()
+print('New purchase created:', new_purchase)
+```
+</CodeGroup>
+
+## See Also
+
+- [Create Cart](/api/cart/add-item) - POST /cart
+- [Delete Cart](/api/cart/remove-item) - DELETE /cart/{id}
+- [Get Cart](/api/cart/get) - GET /cart/{id}

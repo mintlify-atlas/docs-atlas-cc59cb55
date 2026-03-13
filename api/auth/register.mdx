@@ -1,0 +1,118 @@
+---
+title: "Register"
+api: "POST /auth/register"
+description: "Create a new user account"
+---
+
+Registers a new user account. A verification email with a token will be sent to the provided email address. The account must be verified before the user can log in.
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  User's first name. Must contain at least one letter (A-Z, a-z, or accented characters)
+</ParamField>
+
+<ParamField body="lastname" type="string" required>
+  User's last name
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  User's email address. Must be unique
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating that registration was successful and a verification email was sent
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Created user information
+  
+  <ResponseField name="id" type="integer">
+    User's unique identifier
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    User's first name
+  </ResponseField>
+  
+  <ResponseField name="lastname" type="string">
+    User's last name
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    User's email address
+  </ResponseField>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash curl
+curl -X POST https://api.example.com/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John",
+    "lastname": "Doe",
+    "email": "john.doe@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+```json Response (201 Created)
+{
+  "message": "Fuiste registrado satisfactoriamente, revisa tu casilla de correo para ingresar luego el token para activar la cuenta",
+  "user": {
+    "id": 123,
+    "name": "John",
+    "lastname": "Doe",
+    "email": "john.doe@example.com"
+  }
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when:
+  - Request body is null, or email/password is missing
+  - Name doesn't contain at least one letter
+  
+  ```json
+  "Datos incompletos para el registro"
+  ```
+  
+  Or:
+  
+  ```json
+  {
+    "error": "El nombre debe contener al menos una letra"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="409 Conflict">
+  Returned when the email is already registered with an active account.
+  
+  ```json
+  "La cuenta ya está activa. Inicia sesión."
+  ```
+</ResponseField>
+
+<ResponseField name="200 OK (Existing Inactive Account)">
+  If an account exists but is not yet verified, a new verification token is sent.
+  
+  ```json
+  "La cuenta ya existe pero no está activa. Se ha reenviado el token de verificación a tu correo."
+  ```
+</ResponseField>
+
+<Warning>
+  The newly created account will have the role "USER" and will be inactive until email verification is completed.
+</Warning>

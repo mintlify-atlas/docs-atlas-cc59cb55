@@ -1,0 +1,250 @@
+---
+title: "Get Purchase"
+api: "GET /purchase/{id}"
+---
+
+Retrieves detailed information about a specific purchase, including the full cart with all items and product details.
+
+## Authentication
+
+This endpoint requires a valid Bearer token in the Authorization header.
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the purchase to retrieve
+</ParamField>
+
+## Request Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+  
+  Example: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+</ParamField>
+
+## Response
+
+Returns a `PurchaseWithCartDTO` object containing the purchase details and full cart information.
+
+<ResponseField name="id" type="integer">
+  Purchase ID
+</ResponseField>
+
+<ResponseField name="date" type="string">
+  Purchase creation date (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="reservationTime" type="string">
+  Time when stock was reserved (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="direction" type="string" nullable>
+  Delivery address (null until purchase is confirmed)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Purchase status
+  
+  Possible values:
+  - `PENDING` - Stock reserved, awaiting confirmation
+  - `CONFIRMED` - Payment processed, order confirmed
+  - `CANCELLED` - Order cancelled, stock restored
+</ResponseField>
+
+<ResponseField name="cart" type="object">
+  Cart details
+  
+  <ResponseField name="id" type="integer">
+    Cart ID
+  </ResponseField>
+  
+  <ResponseField name="finalPrice" type="float">
+    Total price of all items in the cart
+  </ResponseField>
+  
+  <ResponseField name="items" type="array">
+    Array of cart items
+    
+    <ResponseField name="id" type="integer">
+      Cart item ID
+    </ResponseField>
+    
+    <ResponseField name="quantity" type="integer">
+      Quantity of the product
+    </ResponseField>
+    
+    <ResponseField name="product" type="object">
+      Product details
+      
+      <ResponseField name="id" type="integer">
+        Product ID
+      </ResponseField>
+      
+      <ResponseField name="title" type="string">
+        Product title
+      </ResponseField>
+      
+      <ResponseField name="description" type="string">
+        Product description
+      </ResponseField>
+      
+      <ResponseField name="price" type="float">
+        Product price
+      </ResponseField>
+      
+      <ResponseField name="stock" type="integer">
+        Current stock level
+      </ResponseField>
+      
+      <ResponseField name="mediaSrc" type="array">
+        Array of product image URLs
+      </ResponseField>
+      
+      <ResponseField name="productCode" type="integer">
+        Unique product code
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Status Codes
+
+- **200 OK** - Purchase retrieved successfully (or returns `null` if purchase doesn't exist)
+- **401 Unauthorized** - Invalid or missing authentication token, or user session is not active
+
+<Note>
+  Unlike typical REST APIs, this endpoint returns `200 OK` with a `null` body when the purchase doesn't exist, rather than returning `404 Not Found`.
+</Note>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.example.com/purchase/42" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/purchase/42', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+  }
+});
+
+const purchase = await response.json();
+if (purchase === null) {
+  console.log('Purchase not found');
+} else {
+  console.log(purchase);
+}
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.example.com/purchase/42',
+    headers={'Authorization': 'Bearer YOUR_TOKEN_HERE'}
+)
+
+purchase = response.json()
+if purchase is None:
+    print('Purchase not found')
+else:
+    print(purchase)
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "id": 42,
+  "date": "2026-03-13T10:30:00",
+  "reservationTime": "2026-03-13T10:30:00",
+  "direction": "123 Main St, City, Country",
+  "status": "CONFIRMED",
+  "cart": {
+    "id": 38,
+    "finalPrice": 799.97,
+    "items": [
+      {
+        "id": 101,
+        "quantity": 2,
+        "product": {
+          "id": 10,
+          "title": "Wireless Headphones",
+          "description": "High-quality wireless headphones with noise cancellation",
+          "price": 299.99,
+          "stock": 48,
+          "productCode": 12345,
+          "mediaSrc": [
+            "https://example.com/images/headphones-1.jpg",
+            "https://example.com/images/headphones-2.jpg"
+          ]
+        }
+      },
+      {
+        "id": 102,
+        "quantity": 1,
+        "product": {
+          "id": 15,
+          "title": "USB-C Cable",
+          "description": "Fast charging 2m cable",
+          "price": 19.99,
+          "stock": 199,
+          "productCode": 67890,
+          "mediaSrc": [
+            "https://example.com/images/cable.jpg"
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+## Response When Purchase Doesn't Exist
+
+```json
+null
+```
+
+## Use Cases
+
+- **Order Details Page**: Display full purchase information to users
+- **Order Tracking**: Check current status of an order
+- **Invoice Generation**: Retrieve complete purchase data for invoices
+- **Customer Support**: Look up order details for support tickets
+
+## Related Endpoints
+
+### Get All User Purchases
+```
+GET /purchase/user-purchases
+```
+Returns all purchases for the authenticated user with the same detailed format.
+
+### Get Pending Purchase
+```
+GET /purchase/pending-cart
+```
+Returns the most recent pending purchase (if created within 4 hours).
+
+### Confirm Purchase
+```
+POST /purchase/{id}/confirm/{addressId}
+```
+Confirms a pending purchase and sets the delivery address.
+
+## Important Notes
+
+- **Authentication Required**: User must have an active session
+- **Null Response**: Returns `null` (with 200 status) when purchase doesn't exist
+- **DTO Format**: Response uses `PurchaseWithCartDTO` which includes nested cart and product details
+- **Stock Information**: Product stock levels reflect current availability, not reserved amounts
+
+## See Also
+
+- [List Purchases](/api/orders/list) - GET /purchase
+- [Create Purchase](/api/orders/create) - POST /purchase
+- Confirm Purchase - POST /purchase/{id}/confirm/{addressId} (not yet documented)
+- [Cancel Purchase](/api/orders/cancel) - DELETE /purchase/{id}

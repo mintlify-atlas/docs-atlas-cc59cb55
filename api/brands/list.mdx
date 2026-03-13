@@ -1,0 +1,342 @@
+---
+title: 'Brands'
+description: 'Retrieve and manage product brands'
+---
+
+## Get All Brands
+
+<RequestExample>
+```http
+GET /brands
+```
+</RequestExample>
+
+Retrieves all brands in the system, including both active and inactive brands.
+
+### Response
+
+Returns an array of brand objects.
+
+<ResponseField name="id" type="long">
+  Brand unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Brand name
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the brand is active
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/brands
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands', {
+  method: 'GET'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/brands')
+data = response.json()
+print(data)
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Nike",
+    "active": true
+  },
+  {
+    "id": 2,
+    "name": "Adidas",
+    "active": true
+  },
+  {
+    "id": 3,
+    "name": "Puma",
+    "active": false
+  }
+]
+```
+
+---
+
+## Get Active Brands
+
+<RequestExample>
+```http
+GET /brands/all
+```
+</RequestExample>
+
+Retrieves only active brands with additional fields including brand code.
+
+### Response
+
+Returns an array of active brand objects.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/brands/all
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands/all', {
+  method: 'GET'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+---
+
+## Add Brand
+
+<RequestExample>
+```http
+POST /brands/add
+```
+</RequestExample>
+
+Adds a new brand to the system. If a brand with the same name already exists, returns the existing brand.
+
+### Body Parameters
+
+<ParamField body="name" type="string" required>
+  Brand name (case-insensitive for duplicate checking)
+</ParamField>
+
+<ParamField body="active" type="boolean">
+  Whether the brand is active (defaults to true)
+</ParamField>
+
+### Response
+
+Returns the created or existing brand object.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/brands/add \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Under Armour",
+    "active": true
+  }'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands/add', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Under Armour',
+    active: true
+  })
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 4,
+  "name": "Under Armour",
+  "active": true
+}
+```
+
+---
+
+## Update Brand
+
+<RequestExample>
+```http
+PATCH /brands/:id
+```
+</RequestExample>
+
+Updates an existing brand's name and/or active status.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Brand ID to update
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="name" type="string">
+  New brand name
+</ParamField>
+
+<ParamField body="active" type="boolean">
+  Whether the brand is active
+</ParamField>
+
+### Response
+
+Returns the updated brand object.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.example.com/brands/4 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Under Armour Inc.",
+    "active": true
+  }'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands/4', {
+  method: 'PATCH',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Under Armour Inc.',
+    active: true
+  })
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 4,
+  "name": "Under Armour Inc.",
+  "active": true
+}
+```
+
+---
+
+## Activate Brand
+
+<RequestExample>
+```http
+PATCH /brands/activate/:id
+```
+</RequestExample>
+
+Activates an inactive brand.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Brand ID to activate
+</ParamField>
+
+### Response
+
+Returns the activated brand object.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.example.com/brands/activate/3
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands/activate/3', {
+  method: 'PATCH'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+---
+
+## Delete Brand
+
+<RequestExample>
+```http
+DELETE /brands/:id
+```
+</RequestExample>
+
+Soft-deletes a brand by setting its active status to false.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Brand ID to delete
+</ParamField>
+
+### Response
+
+Returns the updated list of all brands after deletion.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.example.com/brands/3
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/brands/3', {
+  method: 'DELETE'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+---
+
+## Disabled Mock Endpoints
+
+<Warning>
+  The following endpoints are disabled and return 501 Not Implemented. Brand synchronization should be handled through the Communication/Core API.
+</Warning>
+
+- `GET /brands/sync`
+- `POST /brands/mock/add`
+- `PATCH /brands/mock/activate`
+- `PATCH /brands/mock/deactivate`
+- `PATCH /brands/mock/update`
+
+These endpoints will return:
+
+```json
+{
+  "status": 501,
+  "error": "Not Implemented",
+  "message": "Endpoint mock deshabilitado. Use la API de Comunicación para sincronizar marcas."
+}
+```

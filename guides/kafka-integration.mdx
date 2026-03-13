@@ -1,0 +1,536 @@
+---
+title: Kafka Integration
+description: Configure Apache Kafka for event-driven architecture with SASL authentication and topic management
+---
+
+The Ecommerce Backend API uses Apache Kafka for event-driven communication between microservices. This guide covers Kafka broker setup, topic configuration, consumer groups, and event publishing.
+
+## Overview
+
+The application:
+- **Consumes** events from `inventario` topic (inventory updates)
+- **Publishes** events via middleware to `ventas` topic (sales events)
+- Uses **SASL/SCRAM-SHA-512** authentication
+- Implements **idempotency** for event processing
+- Provides **ACK mechanism** for event confirmation
+
+## Kafka Installation
+
+<Steps>
+
+<Step title="Install Kafka with Docker">
+
+Create a `docker-compose-kafka.yml` file:
+
+```yaml
+version: '3.8'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://localhost:9092
+      KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SASL_PLAINTEXT
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: SCRAM-SHA-512
+      KAFKA_SASL_ENABLED_MECHANISMS: SCRAM-SHA-512
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/kafka_jaas.conf
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    volumes:
+      - ./kafka_jaas.conf:/etc/kafka/kafka_jaas.conf
+```
+
+</Step>
+
+<Step title="Configure SASL Authentication">
+
+Create `kafka_jaas.conf`:
+
+```
+KafkaServer {
+  org.apache.kafka.common.security.scram.ScramLoginModule required
+  username="admin"
+  password="admin-secret";
+};
+
+Client {
+  org.apache.kafka.common.security.scram.ScramLoginModule required
+  username="ecommerce_user"
+  password="ecommerce_password";
+};
+```
+
+</Step>
+
+<Step title="Start Kafka">
+
+```bash
+docker-compose -f docker-compose-kafka.yml up -d
+```
+
+Verify Kafka is running:
+
+```bash
+docker logs kafka | grep "started (kafka.server.KafkaServer)"
+```
+
+</Step>
+
+<Step title="Create Kafka Users">
+
+Connect to Kafka container and create users with SCRAM credentials:
+
+```bash
+docker exec -it kafka bash
+
+# Create user
+kafka-configs --zookeeper zookeeper:2181 --alter --add-config \
+  'SCRAM-SHA-512=[password=ecommerce_password]' \
+  --entity-type users --entity-name ecommerce_user
+```
+
+</Step>
+
+</Steps>
+
+## Topic Configuration
+
+### Create Topics
+
+<CodeGroup>
+
+```bash Inventario Topic
+kafka-topics --create \
+  --bootstrap-server localhost:9092 \
+  --topic inventario \
+  --partitions 3 \
+  --replication-factor 1 \
+  --command-config client.properties
+```
+
+```bash Ventas Topic
+kafka-topics --create \
+  --bootstrap-server localhost:9092 \
+  --topic ventas \
+  --partitions 3 \
+  --replication-factor 1 \
+  --command-config client.properties
+```
+
+</CodeGroup>
+
+### Topic Properties
+
+Create `client.properties` for authenticated operations:
+
+```properties
+security.protocol=SASL_PLAINTEXT
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required \
+  username="ecommerce_user" \
+  password="ecommerce_password";
+```
+
+### Verify Topics
+
+```bash
+kafka-topics --list \
+  --bootstrap-server localhost:9092 \
+  --command-config client.properties
+```
+
+Expected output:
+```
+inventario
+ventas
+```
+
+## Application Configuration
+
+### Environment Variables
+
+Set Kafka connection details:
+
+```bash
+export KAFKA_BOOTSTRAP="localhost:9092"
+export KAFKA_USERNAME="ecommerce_user"
+export KAFKA_PASSWORD="ecommerce_password"
+```
+
+### SASL Configuration
+
+The application configures SASL for all Kafka clients:
+
+```properties
+# Producer
+spring.kafka.producer.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.producer.properties.sasl.mechanism=SCRAM-SHA-512
+spring.kafka.producer.properties.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+
+# Consumer
+spring.kafka.consumer.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.consumer.properties.sasl.mechanism=SCRAM-SHA-512
+spring.kafka.consumer.properties.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+
+# Admin
+spring.kafka.admin.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.admin.properties.sasl.mechanism=SCRAM-SHA-512
+spring.kafka.admin.properties.sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+```
+
+<Note>
+All three clients (Producer, Consumer, AdminClient) must have identical SASL configuration.
+</Note>
+
+## Consumer Configuration
+
+### Inventario Consumer
+
+The application primarily listens to the `inventario` topic for inventory updates:
+
+```properties
+inventario.kafka.topic=inventario
+inventario.kafka.concurrency=1
+inventario.kafka.listen-inventario=true
+```
+
+Consumer group:
+```properties
+inventario.kafka.group-id=inventario-ms
+```
+
+### Ventas Consumer (Optional)
+
+Disabled by default, can be enabled:
+
+```properties
+ventas.kafka.enabled=true
+ventas.kafka.topic=ventas
+ventas.kafka.concurrency=3
+ventas.kafka.listen-ventas=false  # Set to true to enable
+```
+
+Consumer group:
+```properties
+spring.kafka.consumer.group-id=ventas-ms
+```
+
+### Consumer Settings
+
+```properties
+spring.kafka.consumer.auto-offset-reset=earliest
+spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
+```
+
+### JSON Deserializer Configuration
+
+```properties
+spring.kafka.consumer.properties.spring.json.use.type.headers=false
+spring.kafka.consumer.properties.spring.json.value.default.type=ar.edu.uade.ecommerce.ventas.EventMessage
+spring.kafka.consumer.properties.spring.json.trusted.packages=*
+```
+
+These settings:
+- Ignore type headers from producers
+- Deserialize all messages to `EventMessage` class
+- Trust all packages (use cautiously in production)
+
+## Event Message Format
+
+### EventMessage Structure
+
+All Kafka messages conform to this structure:
+
+```java
+public class EventMessage {
+    private String eventId;          // Unique identifier
+    private String eventType;        // Event type (e.g., "POST: Compra Confirmada")
+    private Object payload;          // Event data
+    private String originModule;     // Source service (e.g., "inventario")
+    private Object timestamp;        // ISO-8601 or epoch timestamp
+}
+```
+
+### Example Event
+
+```json
+{
+  "eventId": "evt_1234567890",
+  "eventType": "POST: Producto Actualizado",
+  "originModule": "inventario",
+  "timestamp": "2026-03-13T10:30:00Z",
+  "payload": {
+    "productId": 42,
+    "stock": 150,
+    "price": 99.99
+  }
+}
+```
+
+## Event Processing
+
+### Inventario Events Listener
+
+Located in `ar.edu.uade.ecommerce.ventas.InventarioEventsListener`:
+
+```java
+@KafkaListener(
+    topics = "${inventario.kafka.topic:inventario}",
+    concurrency = "${inventario.kafka.concurrency:1}",
+    groupId = "${inventario.kafka.group-id:inventario-ms}"
+)
+public void onMessage(@Payload EventMessage msg) {
+    // Idempotency check
+    if (idempotencyService.alreadyProcessed(eventId)) {
+        return;
+    }
+    
+    // Process event
+    dispatcher.process(msg);
+    
+    // Mark as processed
+    idempotencyService.markProcessed(eventId);
+    
+    // Send ACK to middleware
+    ackClient.sendAck(eventId, "ventas");
+}
+```
+
+### Event Dispatcher
+
+Events are routed based on normalized event type:
+
+```java
+switch (normalizedType) {
+    case "post: compra confirmada" -> handleCompraConfirmada(msg);
+    case "delete: compra cancelada" -> handleCompraCancelada(msg);
+    case "post: review creada" -> handleReviewCreada(msg);
+    // ...
+}
+```
+
+### Idempotency
+
+Events are stored in `consumed_event_log` table to prevent duplicate processing:
+
+```java
+if (idempotencyService.alreadyProcessed(eventId)) {
+    log.info("Event already processed: {}", eventId);
+    monitor.recordDuplicate(eventId);
+    return;
+}
+```
+
+## Event Publishing
+
+The application publishes events via the communication middleware:
+
+### Core API Client
+
+Located in `ar.edu.uade.ecommerce.messaging.CoreApiClient`:
+
+```java
+public void sendEvent(CoreEvent event) {
+    String url = communicationBaseUrl + "/events";
+    HttpEntity<CoreEvent> request = new HttpEntity<>(event, headers);
+    restTemplate.postForEntity(url, request, Void.class);
+}
+```
+
+### Example: Publishing a Sale Event
+
+```java
+CoreEvent event = new CoreEvent();
+event.setType("POST: Compra Confirmada");
+event.setOriginModule("ventas");
+event.setPayload(purchaseData);
+
+coreApiClient.sendEvent(event);
+```
+
+The middleware then routes the event to the appropriate Kafka topic.
+
+## Error Handling and Retry
+
+### Consumer Error Configuration
+
+```properties
+ventas.kafka.error.maxAttempts=3
+ventas.kafka.error.backoff.ms=500
+ventas.kafka.dlq.enabled=false
+```
+
+### Retry Scheduler
+
+Failed events are automatically retried:
+
+```properties
+ventas.retry.enabled=true
+ventas.retry.cron=0 0 */6 * * *
+ventas.retry.maxAttempts=5
+ventas.retry.cooldown.minutes=30
+ventas.retry.batchSize=100
+```
+
+The scheduler:
+- Runs every 6 hours
+- Retries events with `ERROR` status
+- Waits 30 minutes between attempts
+- Processes up to 100 events per batch
+
+### ACK Mechanism
+
+After processing, events are acknowledged:
+
+```properties
+communication.intermediary.ack.enabled=true
+communication.intermediary.ack.path=/events/{eventId}/ack
+communication.intermediary.ack.method=POST
+```
+
+## Monitoring
+
+### Health Check Endpoint
+
+Check consumer status:
+
+```bash
+curl http://localhost:8081/api/health/consumidores
+```
+
+Response:
+```json
+{
+  "handledByType": {
+    "POST: Producto Actualizado": 150
+  },
+  "errorsByType": {
+    "POST: Compra Pendiente": 2
+  },
+  "duplicates": 5,
+  "lastEventIds": ["evt_123", "evt_124"],
+  "uptimeMs": 3600000,
+  "config": {
+    "bootstrapServers": "localhost:9092",
+    "groupId": "ventas-ms",
+    "topic": "ventas",
+    "concurrency": "3"
+  }
+}
+```
+
+### Kafka Monitoring
+
+Monitor consumer lag:
+
+```bash
+kafka-consumer-groups --bootstrap-server localhost:9092 \
+  --describe --group ventas-ms \
+  --command-config client.properties
+```
+
+### Logs
+
+Enable detailed logging:
+
+```properties
+logging.level.ar.edu.uade.ecommerce.ventas=DEBUG
+logging.level.org.springframework.kafka=DEBUG
+```
+
+## Production Considerations
+
+### Replication
+
+For production, use replication factor ≥ 3:
+
+```bash
+kafka-topics --create \
+  --bootstrap-server kafka:9092 \
+  --topic inventario \
+  --partitions 6 \
+  --replication-factor 3
+```
+
+### Partitioning Strategy
+
+Partition by event type or entity ID for ordered processing:
+
+```java
+@KafkaListener(topics = "inventario", concurrency = "6")
+```
+
+### Security
+
+<Warning>
+In production, use SSL/TLS encryption:
+
+```properties
+security.protocol=SASL_SSL
+ssl.truststore.location=/path/to/truststore.jks
+ssl.truststore.password=password
+```
+</Warning>
+
+### Missing Topics
+
+```properties
+spring.kafka.listener.missing-topics-fatal=false
+```
+
+Set to `true` in production to fail fast if topics don't exist.
+
+## Troubleshooting
+
+### Authentication Failures
+
+```
+org.apache.kafka.common.errors.SaslAuthenticationException
+```
+
+**Solution:** Verify SASL credentials and mechanism:
+
+```bash
+kafka-configs --zookeeper zookeeper:2181 --describe \
+  --entity-type users --entity-name ecommerce_user
+```
+
+### Consumer Not Receiving Messages
+
+**Check:**
+1. Consumer group is subscribed: `kafka-consumer-groups --describe`
+2. Messages exist in topic: `kafka-console-consumer --from-beginning`
+3. Offsets are not at end: `--reset-offsets --to-earliest`
+
+### Deserialization Errors
+
+```
+org.springframework.kafka.support.serializer.JsonDeserializationException
+```
+
+**Solution:** Ensure message format matches `EventMessage` structure or enable type headers.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Keycloak Setup" icon="key" href="/guides/keycloak-setup">
+    Configure authentication with Keycloak
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/deployment">
+    Deploy the application to production
+  </Card>
+</CardGroup>

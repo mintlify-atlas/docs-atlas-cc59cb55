@@ -1,97 +1,85 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Welcome to Ecommerce Backend"
+description: "A comprehensive Spring Boot e-commerce API with product catalog, shopping cart, order management, and event-driven integration."
 ---
 
-## Setting up
+# Ecommerce Backend API
 
-Get your documentation site up and running in minutes.
+A production-ready Spring Boot backend service for e-commerce applications, featuring complete product catalog management, user authentication, shopping cart functionality, and event-driven architecture with Kafka.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+## Key Features
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Authentication & Authorization" icon="lock">
+    JWT-based authentication with email verification, password reset, and session management
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Product Catalog" icon="store">
+    Full product management with categories, brands, reviews, ratings, and favorites
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Shopping Cart & Orders" icon="cart-shopping">
+    Complete cart management and purchase workflow with order tracking
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Event-Driven Architecture" icon="bolt">
+    Kafka integration for real-time inventory sync and event-driven communication
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Start
 
-Everything you need to create world-class documentation.
+Get started with the Ecommerce Backend in minutes.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Set up and run the API locally with Docker Compose
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="Installation" icon="download" href="/installation">
+    Detailed installation instructions and prerequisites
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure database, Kafka, and authentication settings
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore all available API endpoints
   </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Core Capabilities
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
+<CardGroup cols={3}>
+  <Card title="User Management" icon="users">
+    Registration, login, profile management, and address handling
+  </Card>
+  <Card title="Product Search & Filter" icon="magnifying-glass">
+    Advanced filtering by category, brand, price range, and search
+  </Card>
+  <Card title="Reviews & Ratings" icon="star">
+    Product reviews with rating aggregation and user feedback
+  </Card>
+  <Card title="Email Notifications" icon="envelope">
+    SMTP integration for verification emails and notifications
+  </Card>
+  <Card title="Keycloak Integration" icon="shield">
+    Backend service authentication via Keycloak client credentials
+  </Card>
+  <Card title="Event Idempotency" icon="repeat">
+    Reliable event processing with retry mechanisms and deduplication
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+The Ecommerce Backend is built with:
+
+- **Spring Boot 3.5.4** - Modern Java framework
+- **Spring Security** - JWT authentication and authorization
+- **Spring Data JPA** - Database access with Hibernate
+- **MySQL** - Primary database
+- **Apache Kafka** - Event streaming and messaging
+- **Keycloak** - Identity and access management
+- **Docker** - Containerization and deployment
+
+## Next Steps
+
+<Card title="Learn Core Concepts" icon="book" href="/concepts/architecture">
+  Understand the architecture, authentication flow, and event-driven design
 </Card>

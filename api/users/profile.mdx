@@ -1,0 +1,170 @@
+---
+title: 'User Profile'
+description: 'Get and update the current user profile'
+---
+
+## Get Current User Profile
+
+<RequestExample>
+```http
+GET /user/me
+```
+</RequestExample>
+
+Retrieves the authenticated user's profile information.
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="integer">
+  User's unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="lastname" type="string">
+  User's last name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  User's role in the system
+</ResponseField>
+
+<ResponseField name="accountActive" type="boolean">
+  Whether the user's account is active
+</ResponseField>
+
+<ResponseField name="sessionActive" type="boolean">
+  Whether the user has an active session
+</ResponseField>
+
+<ResponseField name="addresses" type="array">
+  List of user's addresses
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/user/me \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/user/me', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 1,
+  "name": "John",
+  "lastname": "Doe",
+  "email": "john.doe@example.com",
+  "role": "user",
+  "accountActive": true,
+  "sessionActive": true,
+  "addresses": []
+}
+```
+
+---
+
+## Update User Profile
+
+<RequestExample>
+```http
+PATCH /user/me
+```
+</RequestExample>
+
+Updates the authenticated user's profile. Only name, lastname, and password can be modified.
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="name" type="string">
+  User's first name
+</ParamField>
+
+<ParamField body="lastname" type="string">
+  User's last name
+</ParamField>
+
+<ParamField body="password" type="string">
+  New password for the user
+</ParamField>
+
+### Response
+
+Returns the updated user object with the same structure as GET /user/me.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.example.com/user/me \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane",
+    "lastname": "Smith"
+  }'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/user/me', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Jane',
+    lastname: 'Smith'
+  })
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 1,
+  "name": "Jane",
+  "lastname": "Smith",
+  "email": "john.doe@example.com",
+  "role": "user",
+  "accountActive": true,
+  "sessionActive": true,
+  "addresses": []
+}
+```

@@ -1,0 +1,592 @@
+---
+title: "Event-Driven Architecture"
+description: "Kafka integration, event processing, and idempotency in the Ecommerce Backend API"
+---
+
+## Overview
+
+The Ecommerce Backend API uses Apache Kafka for asynchronous, event-driven communication between microservices. The system publishes business events and consumes events from other services, with built-in idempotency, retry mechanisms, and acknowledgment tracking.
+
+## Kafka Integration Architecture
+
+### Configuration
+
+The application connects to Kafka using SASL_PLAINTEXT authentication with SCRAM-SHA-512:
+
+```properties src/main/resources/application.properties
+# Kafka Bootstrap
+spring.kafka.bootstrap-servers=${KAFKA_BOOTSTRAP:localhost:9092}
+spring.kafka.consumer.group-id=ventas-ms
+spring.kafka.consumer.auto-offset-reset=earliest
+
+# Security Configuration
+spring.kafka.consumer.properties.security.protocol=SASL_PLAINTEXT
+spring.kafka.consumer.properties.sasl.mechanism=SCRAM-SHA-512
+spring.kafka.consumer.properties.sasl.jaas.config=\
+  org.apache.kafka.common.security.scram.ScramLoginModule required \
+  username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+
+# JSON Deserialization
+spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
+spring.kafka.consumer.properties.spring.json.use.type.headers=false
+spring.kafka.consumer.properties.spring.json.value.default.type=ar.edu.uade.ecommerce.ventas.EventMessage
+spring.kafka.consumer.properties.spring.json.trusted.packages=*
+```
+
+<Note>
+The consumer is configured to trust all packages (`*`) for JSON deserialization and ignore type headers to handle events from various producers.
+</Note>
+
+### Topics and Consumers
+
+The system listens to multiple Kafka topics:
+
+<CardGroup cols={2}>
+  <Card title="inventario" icon="warehouse">
+    Primary topic for inventory events (enabled by default)
+  </Card>
+  <Card title="ventas" icon="shopping-cart">
+    Optional topic for sales events (disabled by default)
+  </Card>
+</CardGroup>
+
+```properties
+# Inventario Consumer (Primary)
+inventario.kafka.topic=inventario
+inventario.kafka.concurrency=1
+inventario.kafka.listen-inventario=true
+
+# Ventas Consumer (Optional)
+ventas.kafka.topic=ventas
+ventas.kafka.concurrency=3
+ventas.kafka.listen-ventas=false
+```
+
+## Event Publishing
+
+### Event Service
+
+The `ECommerceEventService` handles publishing events to the communication middleware:
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/ECommerceEventService.java
+@Service
+public class ECommerceEventService {
+    private final CoreApiClient coreApiClient;
+    private final BackendTokenManager backendTokenManager;
+    private final EventRepository eventRepository;
+    
+    @Value("${messaging.origin-module:${keycloak.client-id:Ecommerce}}")
+    private String originModuleName;
+    
+    public void emitRawEvent(String type, Object payload) {
+        // Ensure backend token is available
+        ensureBackendTokenAvailable(type);
+        
+        // Persist event locally for audit
+        persistLocalEvent(type, payload);
+        
+        // Send to middleware
+        CoreEvent event = new CoreEvent(type, payload, originModuleName);
+        logger.info("Emitiendo evento genérico: {} (origin={})", type, originModuleName);
+        coreApiClient.sendEvent(event);
+    }
+}
+```
+
+<Warning>
+Events are persisted locally in the `event` table before being sent to Kafka. This provides an audit trail even if the external event dispatch fails.
+</Warning>
+
+### Event Types
+
+The system publishes the following event types:
+
+#### Purchase Events
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/ECommerceEventService.java
+public void emitPurchasePending(Integer purchaseId, Map<String, Object> user, Map<String, Object> cart) {
+    emitPurchaseEvent("POST: Compra pendiente", purchaseId, user, cart, "PENDING");
+}
+
+public void emitPurchaseConfirmed(Integer purchaseId, Map<String, Object> user, Map<String, Object> cart) {
+    emitPurchaseEvent("POST: Compra confirmada", purchaseId, user, cart, "CONFIRMED");
+}
+
+public void emitPurchaseCancelled(Integer purchaseId, Map<String, Object> user, Map<String, Object> cart) {
+    emitPurchaseEvent("DELETE: Compra cancelada", purchaseId, user, cart, "CANCELLED");
+}
+
+private void emitPurchaseEvent(String type, Integer purchaseId, 
+                                Map<String, Object> user, 
+                                Map<String, Object> cart, 
+                                String status) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("purchaseId", purchaseId);
+    payload.put("user", user);
+    
+    // Sanitize cart items (remove internal IDs)
+    if (cart != null) {
+        sanitizeCartItems(cart);
+    }
+    payload.put("cart", cart);
+    payload.put("status", status);
+    
+    ensureBackendTokenAvailable(type);
+    persistLocalEvent(type, payload);
+    
+    CoreEvent event = new CoreEvent(type, payload, originModuleName);
+    coreApiClient.sendEvent(event);
+}
+```
+
+**Purchase Event Payload:**
+
+```json
+{
+  "purchaseId": 123,
+  "user": {
+    "id": 456,
+    "email": "user@example.com",
+    "name": "John Doe"
+  },
+  "cart": {
+    "items": [
+      {
+        "productCode": 789,
+        "quantity": 2,
+        "price": 99.99
+      }
+    ]
+  },
+  "status": "CONFIRMED"
+}
+```
+
+#### Review Events
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/ECommerceEventService.java
+public void emitReviewCreated(Integer productCode, String message, Float rateUpdated) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("productCode", productCode);
+    payload.put("message", message);
+    payload.put("rateUpdated", rateUpdated);
+    
+    persistLocalEvent("POST: Review creada", payload);
+    CoreEvent event = new CoreEvent("POST: Review creada", payload, originModuleName);
+    coreApiClient.sendEvent(event);
+}
+```
+
+#### Favorite Events
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/ECommerceEventService.java
+public void emitAddFavorite(String productCode, Long id, String nombre) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("productCode", productCode);
+    payload.put("nombre", nombre);
+    
+    CoreEvent event = new CoreEvent("POST: Producto agregado a favoritos", payload, originModuleName);
+    coreApiClient.sendEvent(event);
+}
+
+public void emitRemoveFavorite(String productCode, Long id, String nombre) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("productCode", productCode);
+    payload.put("nombre", nombre);
+    
+    CoreEvent event = new CoreEvent("DELETE: Producto quitado de favoritos", payload, originModuleName);
+    coreApiClient.sendEvent(event);
+}
+```
+
+### Data Sanitization
+
+The service sanitizes cart data before publishing to remove internal database IDs:
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/ECommerceEventService.java
+private void sanitizeCartItems(Map<String, Object> cart) {
+    Object itemsObj = cart.get("items");
+    if (!(itemsObj instanceof List)) {
+        itemsObj = cart.get("cartItems");
+    }
+    
+    if (itemsObj instanceof List<?> rawList) {
+        List<Map<String, Object>> sanitized = new ArrayList<>();
+        for (Object o : rawList) {
+            if (o instanceof Map<?, ?> m) {
+                Map<String, Object> item = new HashMap<>();
+                m.forEach((k, v) -> item.put(String.valueOf(k), v));
+                
+                // Remove internal productId, keep only productCode
+                item.remove("productId");
+                sanitized.add(item);
+            }
+        }
+        
+        // Normalize key to 'items'
+        cart.remove("cartItems");
+        cart.put("items", sanitized);
+    }
+}
+```
+
+<Note>
+Sanitization ensures that internal database IDs are not exposed to external systems, and normalizes field names for consistency.
+</Note>
+
+## Event Consumption
+
+### Inventario Events Listener
+
+The primary consumer listens to the `inventario` topic and processes inventory-related events:
+
+```java src/main/java/ar/edu/uade/ecommerce/ventas/InventarioEventsListener.java
+@Component
+@ConditionalOnProperty(prefix = "inventario.kafka", name = "listen-inventario", 
+                       havingValue = "true", matchIfMissing = true)
+public class InventarioEventsListener {
+    private final EventIdempotencyService idempotencyService;
+    private final VentasConsumerMonitorService monitor;
+    private final VentasInventoryEventDispatcher dispatcher;
+    private final ConsumedEventLogRepository eventLogRepo;
+    private final CoreAckClient ackClient;
+    
+    @KafkaListener(
+        topics = "${inventario.kafka.topic:inventario}",
+        concurrency = "${inventario.kafka.concurrency:1}",
+        groupId = "${inventario.kafka.group-id:inventario-ms}"
+    )
+    public void onMessage(
+        @Payload EventMessage msg,
+        @Header(name = KafkaHeaders.RECEIVED_TOPIC, required = false) String topic,
+        @Header(name = KafkaHeaders.RECEIVED_PARTITION, required = false) Integer partition,
+        @Header(name = KafkaHeaders.OFFSET, required = false) Long offset
+    ) {
+        String eventId = msg.getEventId();
+        String eventType = msg.getEventType();
+        
+        logger.info("[Inventario->Ventas][Kafka] Recibido eventId={} type='{}' topic={} partition={} offset={}",
+                    eventId, eventType, topic, partition, offset);
+        
+        // Create/update event log
+        ConsumedEventLog logRow = eventLogRepo.findByEventId(eventId)
+            .orElseGet(ConsumedEventLog::new);
+        logRow.setEventId(eventId);
+        logRow.setEventType(eventType);
+        logRow.setTopic(topic);
+        logRow.setPartitionId(partition);
+        logRow.setOffsetValue(offset);
+        logRow.setStatus(ConsumedEventStatus.PENDING);
+        logRow = eventLogRepo.save(logRow);
+        
+        // Check idempotency
+        if (idempotencyService.alreadyProcessed(eventId)) {
+            logger.info("[Inventario->Ventas][Kafka] Evento ya procesado: {}", eventId);
+            monitor.recordDuplicate(eventId);
+            return;
+        }
+        
+        try {
+            dispatcher.process(msg);
+            idempotencyService.markProcessed(eventId);
+            
+            logRow.setStatus(ConsumedEventStatus.PROCESSED);
+            logRow.setAttempts(logRow.getAttempts() == null ? 1 : logRow.getAttempts() + 1);
+            
+            // Send ACK to middleware
+            boolean ackOk = ackClient.sendAck(eventId, "ventas");
+            logRow.setAckSent(ackOk);
+            
+            eventLogRepo.save(logRow);
+            monitor.recordProcessed(eventType, eventId);
+        } catch (Exception ex) {
+            monitor.recordError(eventType, eventId);
+            logRow.setStatus(ConsumedEventStatus.ERROR);
+            logRow.setLastError(ex.toString());
+            eventLogRepo.save(logRow);
+            throw ex; // Let container handle retry/backoff
+        }
+    }
+}
+```
+
+### Ventas Events Listener
+
+An optional listener for the `ventas` topic (disabled by default):
+
+```java src/main/java/ar/edu/uade/ecommerce/ventas/VentasEventsListener.java
+@Component
+@ConditionalOnProperty(prefix = "ventas.kafka", name = "listen-ventas", 
+                       havingValue = "true", matchIfMissing = false)
+public class VentasEventsListener {
+    private final EventIdempotencyService idempotencyService;
+    
+    @KafkaListener(topics = "${ventas.kafka.topic:ventas.events}")
+    public void onMessage(@Payload EventMessage msg) {
+        String eventId = msg.getEventId();
+        String eventType = msg.getEventType();
+        
+        if (idempotencyService.alreadyProcessed(eventId)) {
+            logger.info("[Ventas][Kafka] Evento ya procesado: {}", eventId);
+            return;
+        }
+        
+        logger.info("[Ventas][Kafka] Recibido eventId={} type='{}'", eventId, eventType);
+        
+        dispatch(msg.getNormalizedEventType(), msg);
+        idempotencyService.markProcessed(eventId);
+    }
+    
+    private void dispatch(String normalizedType, EventMessage msg) {
+        switch (normalizedType) {
+            case "post: compra confirmada" -> handleCompraConfirmada(msg);
+            case "delete: compra cancelada" -> handleCompraCancelada(msg);
+            case "post: compra pendiente" -> handleCompraPendiente(msg);
+            case "post: review creada" -> handleReviewCreada(msg);
+            default -> logger.info("[Ventas][Kafka] Evento no reconocido: {}", eventType);
+        }
+    }
+}
+```
+
+## Event Idempotency
+
+The system uses an in-memory cache to prevent duplicate event processing:
+
+```java src/main/java/ar/edu/uade/ecommerce/ventas/EventIdempotencyService.java
+@Service
+public class EventIdempotencyService {
+    private static final Logger log = LoggerFactory.getLogger(EventIdempotencyService.class);
+    
+    private final Map<String, Instant> processed = new ConcurrentHashMap<>();
+    private final Duration ttl = Duration.ofHours(24);
+    private final int maxSize = 10_000;
+    
+    public boolean alreadyProcessed(String eventId) {
+        if (eventId == null || eventId.isBlank()) return false;
+        
+        purgeIfNeeded();
+        Instant ts = processed.get(eventId);
+        
+        if (ts == null) return false;
+        
+        boolean expired = ts.isBefore(Instant.now().minus(ttl));
+        if (expired) {
+            processed.remove(eventId);
+            return false;
+        }
+        
+        return true;
+    }
+    
+    public void markProcessed(String eventId) {
+        if (eventId == null || eventId.isBlank()) return;
+        purgeIfNeeded();
+        processed.put(eventId, Instant.now());
+    }
+    
+    private void purgeIfNeeded() {
+        if (processed.size() <= maxSize) return;
+        
+        // Remove expired entries
+        Instant threshold = Instant.now().minus(ttl);
+        processed.entrySet().removeIf(e -> e.getValue().isBefore(threshold));
+        
+        // If still exceeds, trim 10% arbitrarily
+        int size = processed.size();
+        if (size > maxSize) {
+            int toRemove = (int) (size * 0.1);
+            processed.keySet().stream().limit(toRemove).forEach(processed::remove);
+            log.warn("[Idempotency] Recorte de mapa: {} removidos", toRemove);
+        }
+    }
+}
+```
+
+<Accordion title="Idempotency Configuration">
+  - **TTL**: 24 hours (events older than this are considered expired)
+  - **Max Size**: 10,000 event IDs in memory
+  - **Purge Strategy**: Remove expired entries first, then trim 10% if still over limit
+  - **Thread Safety**: Uses `ConcurrentHashMap` for concurrent access
+</Accordion>
+
+<Warning>
+Idempotency state is in-memory and will be lost on application restart. For production systems processing high volumes, consider using Redis or a database-backed solution.
+</Warning>
+
+## Retry Mechanism
+
+Failed events are automatically retried by a scheduled job:
+
+```java src/main/java/ar/edu/uade/ecommerce/ventas/VentasInventoryRetryScheduler.java
+@Component
+@ConditionalOnProperty(prefix = "ventas.retry", name = "enabled", 
+                       havingValue = "true", matchIfMissing = true)
+public class VentasInventoryRetryScheduler {
+    private static final Logger log = LoggerFactory.getLogger(VentasInventoryRetryScheduler.class);
+    
+    private final ConsumedEventLogRepository repo;
+    private final VentasInventoryEventDispatcher dispatcher;
+    private final CoreAckClient ackClient;
+    
+    @Value("${ventas.retry.maxAttempts:5}")
+    private int maxAttempts;
+    
+    @Value("${ventas.retry.cooldown.minutes:30}")
+    private int cooldownMinutes;
+    
+    @Value("${ventas.retry.batchSize:100}")
+    private int batchSize;
+    
+    // Runs every 6 hours by default
+    @Scheduled(cron = "${ventas.retry.cron:0 0 */6 * * *}")
+    public void runBatch() {
+        OffsetDateTime threshold = OffsetDateTime.now().minusMinutes(cooldownMinutes);
+        
+        List<ConsumedEventLog> pending = repo.findByStatusInAndAttemptsLessThanAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+            List.of(ConsumedEventStatus.ERROR, ConsumedEventStatus.PENDING),
+            maxAttempts,
+            threshold,
+            PageRequest.of(0, batchSize)
+        );
+        
+        if (pending.isEmpty()) {
+            log.debug("[RetryScheduler] No hay eventos pendientes para reprocesar.");
+            return;
+        }
+        
+        log.info("[RetryScheduler] Reintentando {} eventos (cooldown={}m, maxAttempts={})", 
+                 pending.size(), cooldownMinutes, maxAttempts);
+        
+        for (ConsumedEventLog e : pending) {
+            try {
+                EventMessage msg = toEventMessage(e);
+                dispatcher.process(msg);
+                
+                e.setStatus(ConsumedEventStatus.PROCESSED);
+                e.setLastError(null);
+                e.setAttempts((e.getAttempts() == null ? 0 : e.getAttempts()) + 1);
+                
+                // Try to send ACK
+                boolean ackOk = ackClient.sendAck(e.getEventId(), "ventas");
+                e.setAckSent(ackOk);
+            } catch (Exception ex) {
+                e.setStatus(ConsumedEventStatus.ERROR);
+                e.setLastError(ex.toString());
+                e.setAttempts((e.getAttempts() == null ? 0 : e.getAttempts()) + 1);
+                log.warn("[RetryScheduler] Error reprocesando eventId={}: {}", 
+                         e.getEventId(), ex.getMessage());
+            } finally {
+                e.setUpdatedAt(OffsetDateTime.now());
+                repo.save(e);
+            }
+        }
+    }
+}
+```
+
+### Retry Configuration
+
+```properties src/main/resources/application.properties
+# Retry mechanism
+ventas.retry.enabled=true
+ventas.retry.cron=0 0 */6 * * *
+ventas.retry.maxAttempts=5
+ventas.retry.cooldown.minutes=30
+ventas.retry.batchSize=100
+```
+
+<CardGroup cols={3}>
+  <Card title="Schedule" icon="calendar">
+    Runs every 6 hours (configurable via cron expression)
+  </Card>
+  <Card title="Max Attempts" icon="repeat">
+    Events are retried up to 5 times before being abandoned
+  </Card>
+  <Card title="Cooldown" icon="clock">
+    30-minute cooldown between retry attempts
+  </Card>
+</CardGroup>
+
+## Event Tracking
+
+All consumed events are tracked in the `consumed_event_log` table:
+
+**Table Schema:**
+
+- `event_id` (String): Unique event identifier
+- `event_type` (String): Event type (e.g., "POST: Compra confirmada")
+- `origin_module` (String): Source service
+- `topic` (String): Kafka topic
+- `partition_id` (Integer): Partition number
+- `offset_value` (Long): Kafka offset
+- `payload_json` (Text): Event payload
+- `status` (Enum): PENDING, PROCESSED, ERROR
+- `attempts` (Integer): Retry count
+- `last_error` (Text): Last error message
+- `ack_sent` (Boolean): ACK delivery status
+- `ack_attempts` (Integer): ACK retry count
+- `created_at`, `updated_at` (Timestamp)
+
+<Note>
+The event log provides full observability into event processing history, including failures, retries, and acknowledgments.
+</Note>
+
+## Acknowledgment System
+
+After successfully processing an event, the system sends an ACK back to the middleware:
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/CoreAckClient.java
+boolean ackOk = ackClient.sendAck(eventId, "ventas");
+logRow.setAckSent(ackOk);
+logRow.setAckAttempts((logRow.getAckAttempts() == null ? 0 : logRow.getAckAttempts()) + 1);
+```
+
+**ACK Configuration:**
+
+```properties
+communication.intermediary.ack.enabled=true
+communication.intermediary.ack.path=/events/{eventId}/ack
+communication.intermediary.ack.method=POST
+```
+
+The ACK endpoint receives the event ID and module name, allowing the middleware to track which services have processed each event.
+
+## Monitoring and Health
+
+The `VentasConsumerMonitorService` tracks consumer metrics:
+
+- Processed event count
+- Error count by event type
+- Duplicate detection count
+- Last processed event timestamp
+
+These metrics can be exposed via actuator endpoints for monitoring dashboards.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Idempotency" icon="check-double">
+    Always check if an event has been processed before handling it
+  </Card>
+  <Card title="Local Persistence" icon="database">
+    Persist events locally before publishing for audit trail
+  </Card>
+  <Card title="Graceful Degradation" icon="shield-halved">
+    Log errors and continue processing other events
+  </Card>
+  <Card title="Monitoring" icon="chart-line">
+    Track event processing metrics and set up alerts
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Learn about the overall system design
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/events/overview">
+    Explore event publishing endpoints
+  </Card>
+</CardGroup>

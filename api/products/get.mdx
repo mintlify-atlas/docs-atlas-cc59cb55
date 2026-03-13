@@ -1,0 +1,225 @@
+---
+title: "Get Product"
+api: "GET /products/{id}"
+description: "Retrieve a specific product by ID with related products"
+---
+
+## Overview
+
+This endpoint returns detailed information about a specific product, including a list of related products based on shared brand or category.
+
+## Path Parameters
+
+<ParamField path="id" type="long" required>
+  The unique identifier of the product
+</ParamField>
+
+## Response
+
+Returns a product with related products.
+
+<ResponseField name="product" type="object">
+  The main product details
+  
+  <ResponseField name="id" type="long">
+    Product unique identifier
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Product title/name
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Product description
+  </ResponseField>
+  
+  <ResponseField name="price" type="float">
+    Product price
+  </ResponseField>
+  
+  <ResponseField name="priceUnit" type="float">
+    Unit price
+  </ResponseField>
+  
+  <ResponseField name="stock" type="integer">
+    Available stock quantity
+  </ResponseField>
+  
+  <ResponseField name="mediaSrc" type="array">
+    Array of image URLs
+  </ResponseField>
+  
+  <ResponseField name="productCode" type="integer">
+    Unique product code
+  </ResponseField>
+  
+  <ResponseField name="calification" type="float">
+    Average rating (0-5)
+  </ResponseField>
+  
+  <ResponseField name="discount" type="float">
+    Discount percentage
+  </ResponseField>
+  
+  <ResponseField name="brand" type="object">
+    Brand information
+    
+    <ResponseField name="id" type="long">
+      Brand ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Brand name
+    </ResponseField>
+    
+    <ResponseField name="active" type="boolean">
+      Brand active status
+    </ResponseField>
+  </ResponseField>
+  
+  <ResponseField name="categories" type="array">
+    Array of category objects
+  </ResponseField>
+  
+  <ResponseField name="isNew" type="boolean">
+    Whether product is marked as new
+  </ResponseField>
+  
+  <ResponseField name="isBestseller" type="boolean">
+    Whether product is a bestseller
+  </ResponseField>
+  
+  <ResponseField name="isFeatured" type="boolean">
+    Whether product is featured
+  </ResponseField>
+  
+  <ResponseField name="hero" type="boolean">
+    Whether product is a hero product
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="relatedProducts" type="array">
+  Array of related products (same brand or category, excluding the main product)
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "https://api.example.com/products/1" \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/1', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/products/1')
+product = response.json()
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "product": {
+    "id": 1,
+    "title": "Wireless Headphones",
+    "description": "High-quality wireless headphones with noise cancellation",
+    "price": 299.99,
+    "priceUnit": 299.99,
+    "stock": 50,
+    "mediaSrc": [
+      "https://example.com/images/headphones-1.jpg",
+      "https://example.com/images/headphones-2.jpg"
+    ],
+    "productCode": 10001,
+    "calification": 4.5,
+    "discount": 10.0,
+    "brand": {
+      "id": 1,
+      "name": "AudioTech",
+      "active": true
+    },
+    "categories": [
+      {
+        "id": 1,
+        "name": "Electronics",
+        "active": true
+      },
+      {
+        "id": 2,
+        "name": "Audio",
+        "active": true
+      }
+    ],
+    "isNew": true,
+    "isBestseller": true,
+    "isFeatured": false,
+    "hero": false,
+    "active": true
+  },
+  "relatedProducts": [
+    {
+      "id": 2,
+      "title": "Bluetooth Speaker",
+      "price": 149.99,
+      "brand": {
+        "id": 1,
+        "name": "AudioTech",
+        "active": true
+      },
+      "categories": [
+        {
+          "id": 2,
+          "name": "Audio",
+          "active": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Earbuds Pro",
+      "price": 199.99,
+      "brand": {
+        "id": 1,
+        "name": "AudioTech",
+        "active": true
+      }
+    }
+  ]
+}
+```
+
+## Error Responses
+
+<ResponseField name="404" type="error">
+  Product not found or inactive
+</ResponseField>
+
+```json
+{
+  "status": 404,
+  "error": "Not Found",
+  "message": "Producto no encontrado"
+}
+```
+
+## Notes
+
+- Only active products (`active=true`) can be retrieved
+- Related products are filtered by shared brand or categories
+- Related products exclude the requested product itself
+- All related products are also filtered to be active only

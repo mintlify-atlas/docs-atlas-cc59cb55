@@ -1,0 +1,356 @@
+---
+title: "Product Reviews"
+api: "POST /products/code/{productCode}/review"
+description: "Add and retrieve product reviews"
+---
+
+## Add Review
+
+<Note>
+  Requires authentication. Users can only submit one review per product.
+</Note>
+
+### Endpoint
+
+```
+POST /products/code/{productCode}/review
+```
+
+### Path Parameters
+
+<ParamField path="productCode" type="integer" required>
+  The unique product code
+</ParamField>
+
+### Request Body
+
+<ParamField body="calification" type="float" required>
+  Rating score (typically 0-5)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Review text/comment
+</ParamField>
+
+### Response
+
+<ResponseField name="productId" type="integer">
+  The product ID
+</ResponseField>
+
+<ResponseField name="productTitle" type="string">
+  The product title
+</ResponseField>
+
+<ResponseField name="promedio" type="float">
+  Updated average rating across all reviews
+</ResponseField>
+
+<ResponseField name="reviews" type="array">
+  Array of all reviews for this product
+  
+  <ResponseField name="id" type="long">
+    Review ID
+  </ResponseField>
+  
+  <ResponseField name="calification" type="float">
+    Rating score
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Review text
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "https://api.example.com/products/code/10001/review" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "calification": 4.5,
+    "description": "Great product! Highly recommend."
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/code/10001/review', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_TOKEN'
+  },
+  body: JSON.stringify({
+    calification: 4.5,
+    description: 'Great product! Highly recommend.'
+  })
+});
+const data = await response.json();
+```
+
+```python Python
+import requests
+
+headers = {
+    'Authorization': 'Bearer YOUR_TOKEN',
+    'Content-Type': 'application/json'
+}
+
+data = {
+    'calification': 4.5,
+    'description': 'Great product! Highly recommend.'
+}
+
+response = requests.post(
+    'https://api.example.com/products/code/10001/review',
+    headers=headers,
+    json=data
+)
+review = response.json()
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "productId": 1,
+  "productTitle": "Wireless Headphones",
+  "promedio": 4.3,
+  "reviews": [
+    {
+      "id": 1,
+      "calification": 5.0,
+      "description": "Excellent sound quality!"
+    },
+    {
+      "id": 2,
+      "calification": 4.0,
+      "description": "Good but a bit expensive"
+    },
+    {
+      "id": 3,
+      "calification": 4.5,
+      "description": "Great product! Highly recommend."
+    }
+  ]
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Product not found
+</ResponseField>
+
+```json
+{
+  "status": 404,
+  "error": "Not Found",
+  "message": "Producto no encontrado por productCode=10001"
+}
+```
+
+<ResponseField name="409" type="error">
+  User has already reviewed this product
+</ResponseField>
+
+```json
+{
+  "status": 409,
+  "error": "Conflict",
+  "message": "Ya has calificado/comentado este producto."
+}
+```
+
+---
+
+## Get Product Reviews
+
+### Endpoint
+
+```
+GET /products/{id}/reviews
+```
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The product ID (not productCode)
+</ParamField>
+
+### Response
+
+<ResponseField name="productId" type="integer">
+  The product ID
+</ResponseField>
+
+<ResponseField name="productTitle" type="string">
+  The product title
+</ResponseField>
+
+<ResponseField name="promedio" type="float">
+  Average rating across all reviews
+</ResponseField>
+
+<ResponseField name="reviews" type="array">
+  Array of all reviews
+  
+  <ResponseField name="id" type="long">
+    Review ID
+  </ResponseField>
+  
+  <ResponseField name="calification" type="float">
+    Rating score
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Review text
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "https://api.example.com/products/1/reviews" \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/1/reviews', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+const reviews = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/products/1/reviews')
+reviews = response.json()
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "productId": 1,
+  "productTitle": "Wireless Headphones",
+  "promedio": 4.3,
+  "reviews": [
+    {
+      "id": 1,
+      "calification": 5.0,
+      "description": "Excellent sound quality!"
+    },
+    {
+      "id": 2,
+      "calification": 4.0,
+      "description": "Good but a bit expensive"
+    },
+    {
+      "id": 3,
+      "calification": 4.5,
+      "description": "Great product! Highly recommend."
+    }
+  ]
+}
+```
+
+---
+
+## Get My Review
+
+<Note>
+  Requires authentication. Returns the authenticated user's review for a specific product.
+</Note>
+
+### Endpoint
+
+```
+GET /products/code/{productCode}/review/me
+```
+
+### Path Parameters
+
+<ParamField path="productCode" type="integer" required>
+  The unique product code
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="long">
+  Review ID
+</ResponseField>
+
+<ResponseField name="calification" type="float">
+  Rating score
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Review text
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "https://api.example.com/products/code/10001/review/me" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/code/10001/review/me', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+});
+const myReview = await response.json();
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 3,
+  "calification": 4.5,
+  "description": "Great product! Highly recommend."
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  User has not reviewed this product
+</ResponseField>
+
+```json
+{
+  "status": 404,
+  "error": "Not Found",
+  "message": "No has calificado/comentado este producto."
+}
+```
+
+## Notes
+
+- Reviews are associated with authenticated users
+- Each user can only submit one review per product
+- Adding a review updates the product's average `calification` field
+- Review events are emitted to the Communication API (Core) system
+- Reviews cannot be edited once submitted (attempting to submit again returns a 409 error)

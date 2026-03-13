@@ -1,0 +1,243 @@
+---
+title: 'Event System Overview'
+description: 'Receive and process events from the Communication/Core API'
+---
+
+## Event System Architecture
+
+The ecommerce backend receives events from the Communication/Core API to synchronize data across services. Events are sent to a listener endpoint that processes different event types.
+
+---
+
+## Receive Event
+
+<RequestExample>
+```http
+POST /api/ecommerce/listener/events
+```
+</RequestExample>
+
+Receives events from the Communication/Core API for processing.
+
+### Headers
+
+<ParamField header="Authorization" type="string">
+  Optional authorization header for authenticated event delivery
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="type" type="string" required>
+  Event type identifier
+</ParamField>
+
+<ParamField body="payload" type="object" required>
+  Event payload data (structure varies by event type)
+</ParamField>
+
+<ParamField body="timestamp" type="string">
+  ISO-8601 timestamp of when the event was created
+</ParamField>
+
+<ParamField body="originModule" type="string">
+  Name of the module that originated the event
+</ParamField>
+
+### Response
+
+Returns 200 OK with no body on successful event reception.
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/api/ecommerce/listener/events \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "type": "UpdateStock",
+    "payload": {
+      "productId": 123,
+      "newStock": 50
+    },
+    "timestamp": "2026-03-13T10:30:00Z",
+    "originModule": "inventory-service"
+  }'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/api/ecommerce/listener/events', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_TOKEN'
+  },
+  body: JSON.stringify({
+    type: 'UpdateStock',
+    payload: {
+      productId: 123,
+      newStock: 50
+    },
+    timestamp: new Date().toISOString(),
+    originModule: 'inventory-service'
+  })
+})
+  .then(response => console.log('Event received'));
+```
+</CodeGroup>
+
+---
+
+## Supported Event Types
+
+The system processes the following event types:
+
+### Stock Events
+
+<ResponseField name="UpdateStock" type="string">
+  Updates product stock levels
+</ResponseField>
+
+<ResponseField name="PATCH: Actualizar stock" type="string">
+  Alternative stock update event type
+</ResponseField>
+
+### Product Events
+
+<ResponseField name="AddProduct" type="string">
+  Adds a new product to the catalog
+</ResponseField>
+
+<ResponseField name="POST: Agregar producto" type="string">
+  Alternative add product event type
+</ResponseField>
+
+<ResponseField name="EditProductFull" type="string">
+  Full product information update
+</ResponseField>
+
+<ResponseField name="EditProductSimple" type="string">
+  Partial product information update
+</ResponseField>
+
+<ResponseField name="DeleteProduct" type="string">
+  Removes a product from the catalog
+</ResponseField>
+
+<ResponseField name="ActivateProduct" type="string">
+  Activates a previously deactivated product
+</ResponseField>
+
+<ResponseField name="DeactivateProduct" type="string">
+  Deactivates a product without deleting it
+</ResponseField>
+
+### Catalog Events
+
+<ResponseField name="BrandSync" type="string">
+  Synchronizes brand information
+</ResponseField>
+
+<ResponseField name="CategorySync" type="string">
+  Synchronizes category information
+</ResponseField>
+
+<ResponseField name="POST: Categoria agregada" type="string">
+  New category added event
+</ResponseField>
+
+<ResponseField name="DELETE: Categoria eliminada" type="string">
+  Category deleted event
+</ResponseField>
+
+---
+
+## Event Processing
+
+When an event is received:
+
+1. The event is validated to ensure it has a valid type
+2. The event type is matched against supported handlers
+3. The appropriate handler processes the event payload
+4. Processing is logged for monitoring and debugging
+5. Unsupported event types are logged but do not cause errors
+
+### Example Event Structures
+
+**Stock Update Event:**
+```json
+{
+  "type": "UpdateStock",
+  "payload": {
+    "productId": 123,
+    "newStock": 50
+  },
+  "timestamp": "2026-03-13T10:30:00-03:00",
+  "originModule": "inventory-service"
+}
+```
+
+**Category Sync Event:**
+```json
+{
+  "type": "CategorySync",
+  "payload": {
+    "categories": [
+      {
+        "id": 1,
+        "name": "Electronics",
+        "active": true,
+        "categoryCode": 100
+      }
+    ]
+  },
+  "timestamp": "2026-03-13T10:30:00-03:00",
+  "originModule": "communication-api"
+}
+```
+
+**Brand Sync Event:**
+```json
+{
+  "type": "BrandSync",
+  "payload": {
+    "brands": [
+      {
+        "id": 1,
+        "name": "Nike",
+        "active": true
+      }
+    ]
+  },
+  "timestamp": "2026-03-13T10:30:00-03:00",
+  "originModule": "communication-api"
+}
+```
+
+---
+
+## Error Handling
+
+### Invalid Event (null)
+
+If the event body is null, it is logged as a warning and ignored:
+
+```
+WARN: Evento inválido recibido: null
+```
+
+### Missing Event Type
+
+If the event type is null or missing, it is logged as a warning:
+
+```
+WARN: Evento inválido recibido: {event details}
+```
+
+### Unsupported Event Type
+
+Unsupported event types are logged but do not cause errors:
+
+```
+INFO: Tipo de evento no manejado localmente: CustomEventType
+```

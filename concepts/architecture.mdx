@@ -1,0 +1,268 @@
+---
+title: "System Architecture"
+description: "Understanding the layered architecture and system design of the Ecommerce Backend API"
+---
+
+## Overview
+
+The Ecommerce Backend API is built using a modern, layered architecture following Spring Boot best practices. The system is designed for scalability, maintainability, and integration with external services.
+
+## Package Structure
+
+The application is organized into clear packages under `ar.edu.uade.ecommerce`:
+
+```
+ar.edu.uade.ecommerce/
+├── Controllers/        # REST API endpoints
+├── Service/           # Business logic layer
+├── Repository/        # Data access layer
+├── Entity/            # JPA entities and DTOs
+├── Security/          # JWT authentication
+├── messaging/         # Event publishing
+├── ventas/            # Kafka event consumers
+├── config/            # Configuration beans
+├── Exceptions/        # Custom exceptions
+└── migration/         # Database migrations
+```
+
+## Layered Architecture
+
+### Controller Layer
+
+The Controller layer handles HTTP requests and responses. Each controller is focused on a specific domain:
+
+<CardGroup cols={2}>
+  <Card title="AuthController" icon="lock">
+    Handles authentication, registration, and session management at `/auth`
+  </Card>
+  <Card title="ProductController" icon="box">
+    Manages product CRUD operations and catalog endpoints
+  </Card>
+  <Card title="PurchaseController" icon="shopping-cart">
+    Processes orders and purchase transactions
+  </Card>
+  <Card title="UserController" icon="user">
+    Manages user profile and account operations
+  </Card>
+</CardGroup>
+
+**Example Controller Structure:**
+
+```java
+@RestController
+@RequestMapping("/auth")
+public class AuthController {
+    @Autowired
+    private AuthService authService;
+
+    @PostMapping("/login")
+    public ResponseEntity<UserLoginResponseDTO> login(@RequestBody Map<String, String> request) {
+        String token = authService.login(email, password);
+        // Return user data and JWT token
+    }
+}
+```
+
+### Service Layer
+
+The Service layer contains business logic and orchestrates operations between controllers and repositories:
+
+```java
+@Service
+public class AuthServiceImpl implements AuthService {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
+    
+    @Override
+    public String login(String email, String password) {
+        // Validate credentials
+        // Generate JWT token
+        return jwtUtil.generateToken(user.getEmail());
+    }
+}
+```
+
+<Note>
+Service classes follow the interface pattern for better testability and dependency injection.
+</Note>
+
+### Repository Layer
+
+The Repository layer uses Spring Data JPA for database operations:
+
+```java
+public interface UserRepository extends JpaRepository<User, Integer> {
+    User findByEmail(String email);
+    // Spring Data JPA automatically implements these methods
+}
+```
+
+### Entity Layer
+
+JPA entities represent database tables with proper relationships:
+
+```java
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+    
+    @Column(unique = true)
+    private String email;
+    
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<Purchase> purchases;
+}
+```
+
+## Database Schema
+
+The system uses MySQL as the primary database with the following core entities:
+
+<Accordion title="Core Entities">
+  - **User**: User accounts with authentication credentials
+  - **Product**: Product catalog with pricing and inventory
+  - **Cart**: Shopping cart and cart items
+  - **Purchase**: Order transactions and history
+  - **Address**: User shipping addresses
+  - **Brand/Category**: Product classification
+  - **Token**: Email verification and password reset tokens
+  - **Event**: Local event log for audit trail
+  - **ConsumedEventLog**: Kafka event processing tracking
+</Accordion>
+
+**Database Configuration:**
+
+```properties
+spring.datasource.url=jdbc:mysql://${SPRING_DATASOURCE_URL}
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+```
+
+<Warning>
+The application uses `ddl-auto=update` which automatically updates the schema. In production, consider using migration tools like Flyway for controlled schema changes.
+</Warning>
+
+## Integration Points
+
+### Kafka Message Broker
+
+The system integrates with Kafka for event-driven communication:
+
+- **Bootstrap Servers**: `${KAFKA_BOOTSTRAP:localhost:9092}`
+- **Security**: SASL_PLAINTEXT with SCRAM-SHA-512
+- **Consumer Groups**: `ventas-ms` for order processing
+- **Topics**: `inventario` (listening), `ventas` (optional)
+
+```properties
+spring.kafka.bootstrap-servers=${KAFKA_BOOTSTRAP:localhost:9092}
+spring.kafka.consumer.group-id=ventas-ms
+spring.kafka.consumer.auto-offset-reset=earliest
+```
+
+### Keycloak Authentication
+
+Backend service authentication with Keycloak:
+
+```properties
+keycloak.token.url=${KEYCLOAK_TOKEN_URL}
+keycloak.client-id=ventas-app
+keycloak.client-secret=${KEYCLOAK_CLIENT_SECRET}
+```
+
+See [Authentication](/concepts/authentication) for JWT implementation details.
+
+### Core API (Communication Middleware)
+
+External API for event routing:
+
+```properties
+communication.intermediary.url=${KAFKA_MIDDLEWARE_URL:http://localhost:8090}
+core.api.url=${CORE_API_URL:http://localhost:8086}
+```
+
+The `CoreApiClient` sends events to the middleware:
+
+```java src/main/java/ar/edu/uade/ecommerce/messaging/CoreApiClient.java
+@Component
+public class CoreApiClient {
+    private final RestTemplate restTemplate;
+    private final String communicationBaseUrl;
+    
+    public void sendEvent(CoreEvent event) {
+        String url = base + "/events";
+        HttpEntity<CoreEvent> request = new HttpEntity<>(event, headers);
+        restTemplate.postForEntity(url, request, Void.class);
+    }
+}
+```
+
+## Configuration Management
+
+The application uses Spring Boot's externalized configuration:
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="code">
+    Production credentials and URLs are injected via environment variables
+  </Card>
+  <Card title="Application Properties" icon="file">
+    Default values and static configuration in `application.properties`
+  </Card>
+</CardGroup>
+
+**Key Configuration Properties:**
+
+- `server.port`: Application port (default: 8081)
+- `spring.application.name`: Service identifier ("Ecommerce")
+- `server.servlet.context-path`: API base path (`/api`)
+- `jwt.secret`: JWT signing key
+- `spring.mail.*`: SMTP configuration for emails
+
+## Security Architecture
+
+Security is implemented at multiple layers:
+
+1. **JWT Authentication**: User session tokens (2-hour expiration)
+2. **Password Encryption**: BCrypt hashing for user passwords
+3. **Email Verification**: Token-based account activation
+4. **Service Authentication**: Keycloak client credentials for backend-to-backend
+5. **HTTPS**: Recommended for production deployments
+
+```java src/main/java/ar/edu/uade/ecommerce/Security/JwtUtil.java
+private final long EXPIRATION_TIME = 7200000; // 2 hours
+
+public String generateToken(String username) {
+    return Jwts.builder()
+        .setSubject(username)
+        .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+        .signWith(signingKey, SignatureAlgorithm.HS512)
+        .compact();
+}
+```
+
+## Error Handling
+
+Global exception handling with `@ControllerAdvice`:
+
+- **UserNotFoundException**: 404 responses
+- **InvalidCredentialsException**: 401 responses  
+- **AccountNotVerifiedException**: 403 responses
+- **IllegalStateException**: 409 conflict responses
+
+See `GlobalExceptionHandler.java` for complete error handling strategy.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/concepts/authentication">
+    Learn about JWT flows and user registration
+  </Card>
+  <Card title="Event-Driven Architecture" icon="bolt" href="/concepts/event-driven">
+    Understand Kafka integration and event processing
+  </Card>
+</CardGroup>

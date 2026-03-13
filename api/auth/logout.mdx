@@ -1,0 +1,62 @@
+---
+title: "Logout"
+api: "POST /auth/logout"
+description: "End user session"
+---
+
+Ends the user's active session. Requires a valid bearer token in the Authorization header.
+
+## Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer {token}`
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Confirmation message that the session has been closed
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash curl
+curl -X POST https://api.example.com/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```json Response (200 OK)
+"Sesión cerrada correctamente"
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when the Authorization header is missing or doesn't start with "Bearer ".
+  
+  ```json
+  "Cabecera Authorization inválida"
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Returned when the provided token is invalid or cannot be decoded.
+  
+  ```json
+  "Token inválido"
+  ```
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  Returned when the user associated with the token is not found.
+  
+  ```json
+  "Usuario no encontrado"
+  ```
+</ResponseField>
+
+<Note>
+  Upon successful logout, the user's session will be marked as inactive in the system.
+</Note>

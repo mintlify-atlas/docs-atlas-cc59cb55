@@ -1,0 +1,176 @@
+---
+title: "List Purchases"
+api: "GET /purchase"
+---
+
+Retrieves all purchases in the system. This is an administrative endpoint that returns all purchases regardless of user.
+
+<Warning>
+  This endpoint does NOT require authentication and returns ALL purchases in the database. This is likely a security concern and should be restricted in production.
+</Warning>
+
+## Response
+
+Returns an array of Purchase objects.
+
+<ResponseField name="purchases" type="array">
+  Array of all purchases in the system
+  
+  <ResponseField name="id" type="integer">
+    Purchase ID
+  </ResponseField>
+  
+  <ResponseField name="date" type="string">
+    Purchase creation date (ISO 8601 format)
+  </ResponseField>
+  
+  <ResponseField name="reservationTime" type="string">
+    Time when stock was reserved
+  </ResponseField>
+  
+  <ResponseField name="status" type="string">
+    Purchase status: `PENDING`, `CONFIRMED`, or `CANCELLED`
+  </ResponseField>
+  
+  <ResponseField name="direction" type="string" nullable>
+    Delivery address
+  </ResponseField>
+  
+  <ResponseField name="cart" type="object">
+    Associated cart reference
+  </ResponseField>
+  
+  <ResponseField name="user" type="object">
+    User who made the purchase
+  </ResponseField>
+</ResponseField>
+
+## Status Codes
+
+- **200 OK** - Returns list of all purchases (may be empty array)
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.example.com/purchase"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/purchase');
+const purchases = await response.json();
+console.log(purchases);
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/purchase')
+purchases = response.json()
+print(purchases)
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+[
+  {
+    "id": 42,
+    "date": "2026-03-13T10:30:00",
+    "reservationTime": "2026-03-13T10:30:00",
+    "status": "PENDING",
+    "direction": null,
+    "cart": {
+      "id": 38
+    },
+    "user": {
+      "id": 5
+    }
+  },
+  {
+    "id": 43,
+    "date": "2026-03-13T11:00:00",
+    "reservationTime": "2026-03-13T11:00:00",
+    "status": "CONFIRMED",
+    "direction": "456 Oak Ave, City, Country",
+    "cart": {
+      "id": 39
+    },
+    "user": {
+      "id": 7
+    }
+  }
+]
+```
+
+## User-Specific Endpoints
+
+For retrieving purchases for the authenticated user, use these endpoints instead:
+
+### Get My Purchases (Invoices)
+```
+GET /purchase/my-purchases
+```
+Returns a list of `PurchaseInvoiceDTO` objects for the authenticated user.
+
+### Get User Purchases with Cart Details
+```
+GET /purchase/user-purchases
+```
+Returns a list of `PurchaseWithCartDTO` objects with full cart and item details for the authenticated user.
+
+### Get Pending Cart
+```
+GET /purchase/pending-cart
+```
+Returns the most recent pending purchase (created within the last 4 hours) for the authenticated user.
+
+<CodeGroup>
+```javascript My Purchases
+const response = await fetch('https://api.example.com/purchase/my-purchases', {
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+  }
+});
+
+const myPurchases = await response.json();
+console.log(myPurchases);
+```
+
+```javascript User Purchases with Details
+const response = await fetch('https://api.example.com/purchase/user-purchases', {
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+  }
+});
+
+const purchases = await response.json();
+console.log(purchases);
+```
+
+```javascript Pending Cart
+const response = await fetch('https://api.example.com/purchase/pending-cart', {
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+  }
+});
+
+if (response.ok) {
+  const pendingPurchase = await response.json();
+  console.log('You have a pending purchase:', pendingPurchase);
+} else if (response.status === 404) {
+  console.log('No pending purchases');
+}
+```
+</CodeGroup>
+
+## Security Considerations
+
+<Warning>
+  **Production Recommendation**: This endpoint should require authentication and potentially admin privileges. Currently, it exposes all purchase data without any access control.
+</Warning>
+
+## See Also
+
+- [Get Purchase](/api/orders/get) - GET /purchase/{id}
+- [Create Purchase](/api/orders/create) - POST /purchase
+- Get My Purchases - GET /purchase/my-purchases (not yet documented)

@@ -1,0 +1,190 @@
+---
+title: 'User Addresses'
+description: 'Manage user addresses'
+---
+
+## Get User Addresses
+
+<RequestExample>
+```http
+GET /user/addresses
+```
+</RequestExample>
+
+Retrieves all addresses for the authenticated user.
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Response
+
+Returns an array of address objects.
+
+<ResponseField name="id" type="integer">
+  Address unique identifier
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Address description or full address text
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/user/addresses \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/user/addresses', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "description": "123 Main St, New York, NY 10001"
+  },
+  {
+    "id": 2,
+    "description": "456 Oak Ave, Los Angeles, CA 90001"
+  }
+]
+```
+
+---
+
+## Add User Address
+
+<RequestExample>
+```http
+POST /user/address
+```
+</RequestExample>
+
+Adds a new address for the authenticated user.
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="description" type="string" required>
+  Address description or full address text
+</ParamField>
+
+### Response
+
+Returns the created address object.
+
+<ResponseField name="id" type="integer">
+  Address unique identifier
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Address description or full address text
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/user/address \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "789 Elm St, Chicago, IL 60601"
+  }'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/user/address', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    description: '789 Elm St, Chicago, IL 60601'
+  })
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "id": 3,
+  "description": "789 Elm St, Chicago, IL 60601"
+}
+```
+
+### Error Responses
+
+<ResponseField name="409 Conflict" type="string">
+  The address already exists for the user
+</ResponseField>
+
+```json
+"La dirección ya existe para el usuario"
+```
+
+---
+
+## Alternative Address Endpoints
+
+The API also provides alternative endpoints under `/address` for address management:
+
+### GET /address/user
+
+Same functionality as GET /user/addresses.
+
+### POST /address
+
+Same functionality as POST /user/address.
+
+### PUT /user/address/:id
+
+Updates an existing address.
+
+<ParamField path="id" type="integer" required>
+  Address ID to update
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  New address description
+</ParamField>
+
+### DELETE /user/address/:id
+
+Deletes an address.
+
+<ParamField path="id" type="integer" required>
+  Address ID to delete
+</ParamField>
+
+Returns: `"Dirección eliminada con éxito"`
+
+### DELETE /address/:id
+
+Alternative endpoint for deleting an address with the same functionality.

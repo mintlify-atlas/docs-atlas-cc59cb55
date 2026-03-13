@@ -1,0 +1,656 @@
+---
+title: Deployment
+description: Deploy the Ecommerce Backend API to production with Docker, environment variables, and AWS configuration
+---
+
+This guide covers deploying the Ecommerce Backend API to production environments using Docker containers, environment configuration, and cloud infrastructure.
+
+## Deployment Options
+
+The application can be deployed using:
+- **Docker** (single container or Docker Compose)
+- **Kubernetes** (EKS, GKE, AKS)
+- **AWS** (ECS, Elastic Beanstalk, EC2)
+- **Traditional** (Java application server)
+
+## Docker Deployment
+
+### Dockerfile Overview
+
+The project includes a multi-stage Dockerfile for optimized builds:
+
+```dockerfile
+# Stage 1: Build
+FROM maven:3.9.11-eclipse-temurin-21 AS builder
+WORKDIR /app
+
+# Cache dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Build application
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Stage 2: Runtime
+FROM amazoncorretto:21
+WORKDIR /app
+
+COPY --from=builder /app/target/app.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+```
+
+**Build Optimizations:**
+- Multi-stage build reduces final image size
+- Dependencies cached separately for faster rebuilds
+- Tests skipped in Docker build (run separately in CI/CD)
+- Uses Amazon Corretto 21 for production runtime
+
+<Note>
+The Dockerfile exposes port 8080, but the application runs on port 8081 by default. Map ports accordingly.
+</Note>
+
+### Building the Image
+
+<Steps>
+
+<Step title="Build Docker Image">
+
+```bash
+docker build -t ecommerce-api:latest .
+```
+
+With custom tag:
+
+```bash
+docker build -t myregistry/ecommerce-api:1.0.0 .
+```
+
+</Step>
+
+<Step title="Test Locally">
+
+```bash
+docker run -d \
+  --name ecommerce-api \
+  -p 8081:8081 \
+  -e SERVER_PORT=8081 \
+  -e SPRING_DATASOURCE_URL="mysql://host.docker.internal:3306/ecommerce" \
+  -e SPRING_DATASOURCE_USERNAME="ecommerce_user" \
+  -e SPRING_DATASOURCE_PASSWORD="password" \
+  -e JWT_SECRET="your-secret-key-min-256-bits" \
+  -e KAFKA_BOOTSTRAP="host.docker.internal:9092" \
+  -e KAFKA_USERNAME="kafka_user" \
+  -e KAFKA_PASSWORD="kafka_password" \
+  -e KEYCLOAK_TOKEN_URL="http://host.docker.internal:8080/realms/ecommerce/protocol/openid-connect/token" \
+  -e KEYCLOAK_CLIENT_SECRET="ecommerce-secret" \
+  -e SPRING_MAIL_USERNAME="your-email@gmail.com" \
+  -e SPRING_MAIL_PASSWORD="your-app-password" \
+  ecommerce-api:latest
+```
+
+</Step>
+
+<Step title="Verify Container">
+
+```bash
+# Check logs
+docker logs -f ecommerce-api
+
+# Test health
+curl http://localhost:8081/api/health/consumidores
+```
+
+</Step>
+
+</Steps>
+
+### Docker Compose Deployment
+
+Create `docker-compose.prod.yml` for full stack deployment:
+
+```yaml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommerce_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.4
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_password
+      KC_HOSTNAME: keycloak.example.com
+    command: ["start"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - keycloak-db
+
+  keycloak-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_password
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  ecommerce-api:
+    image: ecommerce-api:latest
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: mysql://mysql:3306/ecommerce
+      SPRING_DATASOURCE_USERNAME: ecommerce_user
+      SPRING_DATASOURCE_PASSWORD: ecommerce_password
+      JWT_SECRET: ${JWT_SECRET}
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_USERNAME: ${KAFKA_USERNAME}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD}
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/ecommerce/protocol/openid-connect/token
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD}
+      KAFKA_MIDDLEWARE_URL: http://middleware:8090
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysql
+      - kafka
+      - keycloak
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  keycloak_data:
+```
+
+Deploy the stack:
+
+```bash
+# Load environment variables
+export JWT_SECRET=$(openssl rand -base64 32)
+export KAFKA_USERNAME="kafka_user"
+export KAFKA_PASSWORD="kafka_pass"
+export KEYCLOAK_CLIENT_SECRET="ecommerce-secret"
+export SPRING_MAIL_USERNAME="your-email@gmail.com"
+export SPRING_MAIL_PASSWORD="your-app-password"
+export KEYCLOAK_ADMIN_PASSWORD="secure-admin-pass"
+
+# Start services
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## Environment Variables for Production
+
+Create a `.env.production` file:
+
+```bash
+# Server
+SERVER_PORT=8081
+
+# Database
+SPRING_DATASOURCE_URL=mysql://prod-db.example.com:3306/ecommerce
+SPRING_DATASOURCE_USERNAME=ecommerce_prod_user
+SPRING_DATASOURCE_PASSWORD=<secure-password>
+
+# JWT
+JWT_SECRET=<generated-256-bit-secret>
+
+# Kafka
+KAFKA_BOOTSTRAP=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
+KAFKA_USERNAME=ecommerce_kafka_user
+KAFKA_PASSWORD=<kafka-password>
+
+# Keycloak
+KEYCLOAK_TOKEN_URL=https://keycloak.example.com/realms/ecommerce/protocol/openid-connect/token
+KEYCLOAK_CLIENT_SECRET=<client-secret>
+
+# Email
+SPRING_MAIL_USERNAME=noreply@example.com
+SPRING_MAIL_PASSWORD=<app-password>
+
+# Middleware
+KAFKA_MIDDLEWARE_URL=https://middleware.example.com
+CORE_API_URL=https://core-api.example.com
+
+# Logging
+LOGGING_LEVEL_ROOT=INFO
+LOGGING_LEVEL_AR_EDU_UADE_ECOMMERCE=INFO
+```
+
+<Warning>
+Never commit `.env.production` to version control. Use secret management systems for production credentials.
+</Warning>
+
+## Health Check Endpoints
+
+The application provides health check endpoints for container orchestration:
+
+### Consumer Health
+
+```bash
+curl http://localhost:8081/api/health/consumidores
+```
+
+Response:
+```json
+{
+  "handledByType": {"POST: Producto Actualizado": 150},
+  "errorsByType": {},
+  "duplicates": 5,
+  "uptimeMs": 3600000,
+  "config": {
+    "bootstrapServers": "kafka:9092",
+    "groupId": "ventas-ms",
+    "topic": "ventas"
+  }
+}
+```
+
+### Spring Boot Actuator (Optional)
+
+Add to `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+Configure in `application.properties`:
+
+```properties
+management.endpoints.web.exposure.include=health,info,metrics
+management.endpoint.health.show-details=when-authorized
+```
+
+Health endpoint:
+```bash
+curl http://localhost:8081/api/actuator/health
+```
+
+## Kubernetes Deployment
+
+### Kubernetes Manifest
+
+Create `k8s/deployment.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-api
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ecommerce-api
+  template:
+    metadata:
+      labels:
+        app: ecommerce-api
+    spec:
+      containers:
+      - name: ecommerce-api
+        image: myregistry/ecommerce-api:1.0.0
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SERVER_PORT
+          value: "8081"
+        - name: SPRING_DATASOURCE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: database-url
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: database-username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: database-password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ecommerce-secrets
+              key: jwt-secret
+        - name: KAFKA_BOOTSTRAP
+          value: "kafka-service:9092"
+        - name: KAFKA_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secrets
+              key: username
+        - name: KAFKA_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kafka-secrets
+              key: password
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health/consumidores
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health/consumidores
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-api-service
+  namespace: production
+spec:
+  selector:
+    app: ecommerce-api
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8081
+  type: LoadBalancer
+```
+
+Deploy to Kubernetes:
+
+```bash
+kubectl apply -f k8s/deployment.yaml
+```
+
+## AWS Deployment
+
+### AWS ECS (Elastic Container Service)
+
+<Steps>
+
+<Step title="Push Image to ECR">
+
+```bash
+# Authenticate
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+
+# Tag image
+docker tag ecommerce-api:latest <account-id>.dkr.ecr.us-east-1.amazonaws.com/ecommerce-api:latest
+
+# Push
+docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/ecommerce-api:latest
+```
+
+</Step>
+
+<Step title="Create Task Definition">
+
+Create `ecs-task-definition.json`:
+
+```json
+{
+  "family": "ecommerce-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [
+    {
+      "name": "ecommerce-api",
+      "image": "<account-id>.dkr.ecr.us-east-1.amazonaws.com/ecommerce-api:latest",
+      "portMappings": [
+        {
+          "containerPort": 8081,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "SERVER_PORT", "value": "8081"}
+      ],
+      "secrets": [
+        {"name": "SPRING_DATASOURCE_URL", "valueFrom": "arn:aws:secretsmanager:us-east-1:account:secret:db-url"},
+        {"name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-1:account:secret:jwt-secret"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ecommerce-api",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8081/api/health/consumidores || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
+      }
+    }
+  ]
+}
+```
+
+Register task definition:
+
+```bash
+aws ecs register-task-definition --cli-input-json file://ecs-task-definition.json
+```
+
+</Step>
+
+<Step title="Create ECS Service">
+
+```bash
+aws ecs create-service \
+  --cluster ecommerce-cluster \
+  --service-name ecommerce-api-service \
+  --task-definition ecommerce-api \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxx,subnet-yyy],securityGroups=[sg-xxx],assignPublicIp=ENABLED}" \
+  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:...,containerName=ecommerce-api,containerPort=8081"
+```
+
+</Step>
+
+</Steps>
+
+### AWS RDS for MySQL
+
+```bash
+# Get RDS endpoint
+SPRING_DATASOURCE_URL=mysql://ecommerce-db.xxxx.us-east-1.rds.amazonaws.com:3306/ecommerce
+```
+
+### AWS MSK for Kafka
+
+```bash
+# Get MSK bootstrap servers
+KAFKA_BOOTSTRAP=b-1.ecommerce-kafka.xxxx.kafka.us-east-1.amazonaws.com:9092,b-2.ecommerce-kafka.xxxx.kafka.us-east-1.amazonaws.com:9092
+```
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+The application is stateless and can be scaled horizontally:
+
+```bash
+# Docker Compose
+docker-compose up -d --scale ecommerce-api=3
+
+# Kubernetes
+kubectl scale deployment ecommerce-api --replicas=5
+```
+
+### Kafka Consumer Concurrency
+
+Scale Kafka consumers via concurrency setting:
+
+```properties
+inventario.kafka.concurrency=6
+```
+
+This creates 6 consumer threads per application instance.
+
+### Database Connection Pooling
+
+Adjust connection pool size based on load:
+
+```properties
+spring.datasource.hikari.maximum-pool-size=20
+spring.datasource.hikari.minimum-idle=10
+```
+
+### Load Balancing
+
+Use a load balancer (Nginx, AWS ALB, K8s Ingress):
+
+```nginx
+upstream ecommerce_api {
+    server app1:8081;
+    server app2:8081;
+    server app3:8081;
+}
+
+server {
+    listen 80;
+    location /api {
+        proxy_pass http://ecommerce_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+## Monitoring and Logging
+
+### CloudWatch (AWS)
+
+```json
+{
+  "logConfiguration": {
+    "logDriver": "awslogs",
+    "options": {
+      "awslogs-group": "/ecs/ecommerce-api",
+      "awslogs-region": "us-east-1",
+      "awslogs-stream-prefix": "ecs"
+    }
+  }
+}
+```
+
+### Prometheus Metrics (Kubernetes)
+
+Add Prometheus annotations:
+
+```yaml
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/api/actuator/prometheus"
+    prometheus.io/port: "8081"
+```
+
+## Security Checklist
+
+- [ ] Use HTTPS/TLS for all external communication
+- [ ] Store secrets in AWS Secrets Manager or Kubernetes Secrets
+- [ ] Rotate credentials regularly
+- [ ] Enable Kafka SASL_SSL (not SASL_PLAINTEXT)
+- [ ] Use VPC/network isolation
+- [ ] Configure security groups to restrict access
+- [ ] Enable database encryption at rest
+- [ ] Use strong JWT secrets (256+ bits)
+- [ ] Implement rate limiting on API Gateway
+- [ ] Enable audit logging
+
+## Rollback Strategy
+
+### Docker
+
+```bash
+# Tag previous version
+docker tag ecommerce-api:1.0.0 ecommerce-api:previous
+
+# Rollback
+docker stop ecommerce-api
+docker rm ecommerce-api
+docker run -d --name ecommerce-api ecommerce-api:previous
+```
+
+### Kubernetes
+
+```bash
+# View history
+kubectl rollout history deployment/ecommerce-api
+
+# Rollback to previous
+kubectl rollout undo deployment/ecommerce-api
+
+# Rollback to specific revision
+kubectl rollout undo deployment/ecommerce-api --to-revision=2
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/api/auth/login">
+    Explore API endpoints
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Review configuration options
+  </Card>
+</CardGroup>

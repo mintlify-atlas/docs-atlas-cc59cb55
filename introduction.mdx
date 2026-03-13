@@ -1,0 +1,147 @@
+---
+title: Introduction
+description: Welcome to the Ecommerce Backend API documentation
+---
+
+## Overview
+
+The Ecommerce Backend API is a comprehensive microservice built with Spring Boot that powers e-commerce operations for the Ventas (Sales) module. This RESTful API provides a complete solution for managing products, user accounts, shopping carts, orders, and event-driven communication between microservices.
+
+## Who is this for?
+
+This API is designed for:
+
+- **Frontend developers** building e-commerce web or mobile applications
+- **Backend developers** integrating with the Ventas microservice ecosystem
+- **DevOps engineers** deploying and maintaining the platform
+- **System architects** understanding the event-driven architecture
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="user">
+    Complete authentication system with JWT tokens, email verification, password reset, and session management
+  </Card>
+  
+  <Card title="Product Catalog" icon="boxes-stacked">
+    Full product management with categories, brands, reviews, ratings, favorites, and advanced filtering capabilities
+  </Card>
+  
+  <Card title="Shopping Cart" icon="cart-shopping">
+    Real-time cart management with item operations and checkout functionality
+  </Card>
+  
+  <Card title="Event-Driven Architecture" icon="signal-stream">
+    Kafka-based messaging for inter-service communication with inventory, core services, and external systems
+  </Card>
+</CardGroup>
+
+### Additional Features
+
+- **Keycloak Integration**: OAuth2/OIDC authentication support with client credentials flow
+- **Event Idempotency**: Duplicate event detection and handling for reliable messaging
+- **Inventory Synchronization**: Real-time stock updates via Kafka consumers
+- **Review System**: Product ratings and reviews with automatic average calculation
+- **Email Notifications**: SMTP-based email system for account verification and password resets
+- **Health Monitoring**: Dedicated health check endpoints for service and consumer monitoring
+
+## Technology Stack
+
+The Ecommerce Backend API is built with modern, production-ready technologies:
+
+<CodeGroup>
+```xml Core Framework
+Spring Boot 3.5.4
+Spring Data JPA
+Spring Security
+Spring Kafka
+```
+
+```xml Database
+MySQL (Production)
+H2 (Development/Testing)
+Hibernate ORM
+```
+
+```xml Messaging & Events
+Apache Kafka
+Spring Kafka
+Keycloak 24.0.4
+```
+
+```xml Authentication
+JWT (io.jsonwebtoken 0.11.5)
+Keycloak Spring Boot Starter
+Spring Security
+```
+
+```xml Additional Technologies
+Lombok
+Jackson (JSON serialization)
+SpringDoc OpenAPI 2.3.0
+Maven
+Java 17
+```
+</CodeGroup>
+
+<Note>
+  The API uses **Java 17** as the target runtime. Make sure your environment meets this requirement.
+</Note>
+
+## Architecture Overview
+
+The API follows a layered architecture pattern:
+
+- **Controllers**: REST endpoints handling HTTP requests (`/auth`, `/products`, `/cart`, `/user`)
+- **Services**: Business logic implementation with transaction management
+- **Repositories**: JPA data access layer with custom queries
+- **Entities**: JPA entities mapped to database tables
+- **Messaging**: Kafka producers and consumers for event-driven communication
+- **Security**: JWT-based authentication and authorization filters
+
+## API Endpoints
+
+The API exposes several controller endpoints:
+
+- `/api/auth` - Authentication (login, register, logout, email verification)
+- `/api/products` - Product catalog and filtering
+- `/api/cart` - Shopping cart operations
+- `/api/user` - User profile management
+- `/api/purchases` - Order history and management
+- `/api/categories` - Product categories
+- `/api/brands` - Product brands
+- `/api/events` - Event ingestion from external systems
+
+<Warning>
+  The API runs behind a `/api` context path. All endpoints must include this prefix when deployed.
+</Warning>
+
+## Event-Driven Communication
+
+The API integrates with multiple Kafka topics:
+
+- **ventas** topic: Consumes sales events from other services
+- **inventario** topic: Listens for inventory updates and stock changes
+- **Event publishing**: Publishes cart, review, and favorite events to the Core API
+
+## API Documentation
+
+Interactive API documentation is available via **SpringDoc OpenAPI** (Swagger UI) when the application is running:
+
+```
+http://localhost:8081/api/swagger-ui.html
+```
+
+## Getting Started
+
+Ready to get started? Check out the [Quickstart Guide](/quickstart) to run the API with Docker Compose in minutes, or see the [Installation Guide](/installation) for detailed setup instructions.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get the API running quickly with Docker Compose
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/installation">
+    Complete installation and configuration guide
+  </Card>
+</CardGroup>

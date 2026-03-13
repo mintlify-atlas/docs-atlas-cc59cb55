@@ -1,0 +1,227 @@
+---
+title: "Create Cart and Purchase"
+api: "POST /cart"
+---
+
+Creates a new cart with items and automatically generates a pending purchase. This endpoint validates product availability, stock levels, and active status before creating the cart. It also reserves product stock and creates a purchase order with a 4-hour reservation time.
+
+## Cart Workflow
+
+1. **Cart Creation** - Items are validated and cart is created
+2. **Stock Reservation** - Product stock is decremented immediately
+3. **Purchase Generation** - A pending purchase is automatically created
+4. **Expiration** - Purchase expires after 4 hours if not confirmed
+
+## Authentication
+
+This endpoint requires a valid Bearer token in the Authorization header.
+
+## Request Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+  
+  Example: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+</ParamField>
+
+## Request Body
+
+<ParamField body="items" type="array" required>
+  Array of cart items to add
+  
+  <ParamField body="product" type="object" required>
+    Product information
+    
+    <ParamField body="id" type="integer" required>
+      Product ID to add to cart
+    </ParamField>
+  </ParamField>
+  
+  <ParamField body="quantity" type="integer" required>
+    Quantity of the product (must not exceed available stock)
+  </ParamField>
+</ParamField>
+
+## Response
+
+Returns a **Purchase** object (not a Cart object) with PENDING status.
+
+<ResponseField name="id" type="integer">
+  Purchase ID
+</ResponseField>
+
+<ResponseField name="date" type="string">
+  Purchase creation date (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="reservationTime" type="string">
+  Time when the stock reservation was made (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Purchase status - will be "PENDING" for new carts
+</ResponseField>
+
+<ResponseField name="direction" type="string" nullable>
+  Delivery address (null until purchase is confirmed)
+</ResponseField>
+
+<ResponseField name="cart" type="object">
+  The created cart details
+  
+  <ResponseField name="id" type="integer">
+    Cart ID
+  </ResponseField>
+  
+  <ResponseField name="finalPrice" type="float">
+    Total price calculated from all items
+  </ResponseField>
+  
+  <ResponseField name="items" type="array">
+    Array of cart items with updated stock information
+  </ResponseField>
+</ResponseField>
+
+## Status Codes
+
+- **200 OK** - Cart and purchase created successfully
+- **400 Bad Request** - Invalid request (product not found, inactive product, or insufficient stock)
+- **401 Unauthorized** - Invalid or missing authentication token, or user session is not active
+
+## Error Responses
+
+Errors are returned in the `X-Error-Message` header:
+
+- `Producto no encontrado: ID {id}` - Product does not exist
+- `El producto '{title}' no está activo` - Product is not active/available
+- `Stock insuficiente para el producto '{title}'. Disponible: {available}, Solicitado: {requested}` - Insufficient stock
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.example.com/cart" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [
+      {
+        "product": {
+          "id": 10
+        },
+        "quantity": 2
+      },
+      {
+        "product": {
+          "id": 15
+        },
+        "quantity": 1
+      }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/cart', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    items: [
+      {
+        product: { id: 10 },
+        quantity: 2
+      },
+      {
+        product: { id: 15 },
+        quantity: 1
+      }
+    ]
+  })
+});
+
+const purchase = await response.json();
+console.log(purchase);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.example.com/cart',
+    headers={
+        'Authorization': 'Bearer YOUR_TOKEN_HERE',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'items': [
+            {
+                'product': {'id': 10},
+                'quantity': 2
+            },
+            {
+                'product': {'id': 15},
+                'quantity': 1
+            }
+        ]
+    }
+)
+
+purchase = response.json()
+print(purchase)
+```
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "id": 42,
+  "date": "2026-03-13T10:30:00",
+  "reservationTime": "2026-03-13T10:30:00",
+  "status": "PENDING",
+  "direction": null,
+  "cart": {
+    "id": 38,
+    "finalPrice": 799.97,
+    "items": [
+      {
+        "id": 101,
+        "quantity": 2,
+        "product": {
+          "id": 10,
+          "title": "Wireless Headphones",
+          "description": "High-quality wireless headphones",
+          "price": 299.99,
+          "stock": 48,
+          "productCode": 12345,
+          "mediaSrc": ["https://example.com/image1.jpg"]
+        }
+      },
+      {
+        "id": 102,
+        "quantity": 1,
+        "product": {
+          "id": 15,
+          "title": "USB-C Cable",
+          "description": "Fast charging cable",
+          "price": 19.99,
+          "stock": 199,
+          "productCode": 67890,
+          "mediaSrc": ["https://example.com/image2.jpg"]
+        }
+      }
+    ]
+  }
+}
+```
+
+## Important Notes
+
+- **Stock Reservation**: Product stock is immediately decremented when the cart is created
+- **Purchase Expiration**: The purchase will expire after 4 hours if not confirmed
+- **Price Calculation**: The `finalPrice` is automatically calculated based on product prices and quantities
+- **User Association**: The cart and purchase are automatically associated with the authenticated user
+- **Stock Errors**: If there's an error updating stock, the response will include an `X-Stock-Error` header
+- **Validation**: All products must exist, be active, and have sufficient stock before cart creation
+- **Atomic Operation**: Cart creation and purchase generation happen in a single transaction

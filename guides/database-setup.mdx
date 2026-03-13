@@ -1,0 +1,391 @@
+---
+title: Database Setup
+description: Configure MySQL database for the Ecommerce Backend API with schema creation and connection pooling
+---
+
+The Ecommerce Backend API uses MySQL as its primary database with JPA/Hibernate for ORM. This guide covers database installation, configuration, and schema management.
+
+## Prerequisites
+
+- MySQL 8.0 or higher
+- Database user with CREATE, ALTER, and SELECT privileges
+- Network connectivity to MySQL server
+
+## MySQL Installation
+
+<Steps>
+
+<Step title="Install MySQL">
+
+### Using Docker (Recommended for Development)
+
+```bash
+docker run -d \
+  --name ecommerce-mysql \
+  -e MYSQL_ROOT_PASSWORD=rootpassword \
+  -e MYSQL_DATABASE=ecommerce \
+  -e MYSQL_USER=ecommerce_user \
+  -e MYSQL_PASSWORD=secure_password \
+  -p 3306:3306 \
+  mysql:8.0
+```
+
+### Using Package Manager (Linux)
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install mysql-server
+
+# CentOS/RHEL
+sudo yum install mysql-server
+```
+
+### macOS with Homebrew
+
+```bash
+brew install mysql
+brew services start mysql
+```
+
+</Step>
+
+<Step title="Create Database and User">
+
+Connect to MySQL as root:
+
+```bash
+mysql -u root -p
+```
+
+Create the database and user:
+
+```sql
+CREATE DATABASE ecommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER 'ecommerce_user'@'%' IDENTIFIED BY 'secure_password';
+
+GRANT ALL PRIVILEGES ON ecommerce.* TO 'ecommerce_user'@'%';
+
+FLUSH PRIVILEGES;
+
+EXIT;
+```
+
+<Note>
+Replace `secure_password` with a strong password. Use `'ecommerce_user'@'localhost'` instead of `'%'` to restrict access to local connections only.
+</Note>
+
+</Step>
+
+<Step title="Configure Application">
+
+Set the database environment variables:
+
+```bash
+export SPRING_DATASOURCE_URL="mysql://localhost:3306/ecommerce"
+export SPRING_DATASOURCE_USERNAME="ecommerce_user"
+export SPRING_DATASOURCE_PASSWORD="secure_password"
+```
+
+Or add them to your `.env` file:
+
+```bash
+SPRING_DATASOURCE_URL=mysql://localhost:3306/ecommerce
+SPRING_DATASOURCE_USERNAME=ecommerce_user
+SPRING_DATASOURCE_PASSWORD=secure_password
+```
+
+</Step>
+
+<Step title="Test Connection">
+
+Verify the connection:
+
+```bash
+mysql -h localhost -u ecommerce_user -p ecommerce
+```
+
+You should be able to connect without errors.
+
+</Step>
+
+</Steps>
+
+## JPA/Hibernate Configuration
+
+### Schema Auto-Generation
+
+The application uses Hibernate's `ddl-auto=update` mode:
+
+```properties
+spring.jpa.hibernate.ddl-auto=update
+```
+
+This setting:
+- Creates tables automatically on first run
+- Updates existing tables when entities change
+- Does NOT drop existing data
+- Does NOT remove columns (only adds new ones)
+
+<Warning>
+In production, consider using `validate` mode and managing schema changes with migration tools like Flyway or Liquibase.
+</Warning>
+
+### Entity Scanning
+
+JPA entities are located in `ar.edu.uade.ecommerce.Entity` package. The application automatically scans and creates tables for all `@Entity` annotated classes.
+
+## Database Schema
+
+### Core Entities
+
+The following tables are created automatically:
+
+<CodeGroup>
+
+```sql Users
+CREATE TABLE users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255),
+  lastname VARCHAR(255),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password VARCHAR(255),
+  role VARCHAR(50),
+  account_active BOOLEAN DEFAULT FALSE,
+  session_active BOOLEAN DEFAULT FALSE
+);
+```
+
+```sql Products
+CREATE TABLE product (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  brand_id INT,
+  title VARCHAR(255),
+  description TEXT,
+  price FLOAT,
+  is_new BOOLEAN,
+  is_bestseller BOOLEAN,
+  is_featured BOOLEAN,
+  stock INT,
+  hero BOOLEAN,
+  active BOOLEAN,
+  discount FLOAT,
+  price_unit FLOAT,
+  product_code INT,
+  calification FLOAT,
+  FOREIGN KEY (brand_id) REFERENCES brand(id)
+);
+```
+
+```sql Events
+CREATE TABLE consumed_event_log (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  event_id VARCHAR(255) UNIQUE NOT NULL,
+  event_type VARCHAR(255),
+  origin_module VARCHAR(255),
+  timestamp_raw VARCHAR(255),
+  topic VARCHAR(255),
+  partition_id INT,
+  offset_value BIGINT,
+  payload_json TEXT,
+  status VARCHAR(50) DEFAULT 'PENDING',
+  attempts INT DEFAULT 0,
+  last_error TEXT,
+  created_at DATETIME,
+  updated_at DATETIME,
+  ack_sent BOOLEAN DEFAULT FALSE,
+  ack_attempts INT DEFAULT 0,
+  ack_last_error TEXT,
+  ack_last_at DATETIME,
+  INDEX idx_cel_event_id (event_id),
+  INDEX idx_cel_status (status)
+);
+```
+
+</CodeGroup>
+
+### Additional Tables
+
+The schema includes tables for:
+- `cart` and `cart_item` - Shopping cart management
+- `purchase` - Order records
+- `review` - Product reviews
+- `favourite_products` - User favorites
+- `address` - User addresses
+- `category` and `brand` - Product categorization
+- `token` - Authentication tokens
+- `product_view` - Product view tracking
+- `event` - Event sourcing
+
+## Connection Pool Configuration
+
+Spring Boot uses HikariCP as the default connection pool. While the default settings work well, you can tune them:
+
+```properties
+# Maximum pool size
+spring.datasource.hikari.maximum-pool-size=10
+
+# Minimum idle connections
+spring.datasource.hikari.minimum-idle=5
+
+# Connection timeout (ms)
+spring.datasource.hikari.connection-timeout=30000
+
+# Maximum lifetime (ms)
+spring.datasource.hikari.max-lifetime=1800000
+
+# Idle timeout (ms)
+spring.datasource.hikari.idle-timeout=600000
+```
+
+Add these to `application.properties` or set as environment variables (replace `.` with `_` and uppercase).
+
+## Migration Considerations
+
+### From Development to Production
+
+<Steps>
+
+<Step title="Export Schema">
+
+After development, export the schema:
+
+```bash
+mysqldump -u root -p --no-data ecommerce > schema.sql
+```
+
+</Step>
+
+<Step title="Change DDL Mode">
+
+Update `application.properties` for production:
+
+```properties
+spring.jpa.hibernate.ddl-auto=validate
+```
+
+This prevents automatic schema changes.
+
+</Step>
+
+<Step title="Use Migration Tools">
+
+Consider using Flyway or Liquibase for version-controlled migrations:
+
+```xml
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-core</artifactId>
+</dependency>
+```
+
+</Step>
+
+</Steps>
+
+### Handling Schema Updates
+
+When entity classes change:
+
+1. **Development**: `ddl-auto=update` applies changes automatically
+2. **Production**: Create migration scripts manually
+3. **Test migrations** in staging before production
+
+## Database Maintenance
+
+### Backup
+
+Regular backups are essential:
+
+```bash
+# Full backup
+mysqldump -u root -p ecommerce > backup_$(date +%Y%m%d).sql
+
+# Restore
+mysql -u root -p ecommerce < backup_20260313.sql
+```
+
+### Monitoring
+
+Check connection pool status via Spring Boot Actuator:
+
+```bash
+curl http://localhost:8081/api/actuator/metrics/hikaricp.connections
+```
+
+### Performance Tuning
+
+```sql
+-- Check slow queries
+SET GLOBAL slow_query_log = 'ON';
+SET GLOBAL long_query_time = 2;
+
+-- Add indexes for frequently queried columns
+CREATE INDEX idx_product_active ON product(active);
+CREATE INDEX idx_user_email ON users(email);
+```
+
+## Troubleshooting
+
+### Connection Refused
+
+```
+Com.mysql.cj.jdbc.exceptions.CommunicationsException: Communications link failure
+```
+
+**Solutions:**
+- Verify MySQL is running: `systemctl status mysql`
+- Check firewall rules
+- Confirm host and port in `SPRING_DATASOURCE_URL`
+
+### Authentication Failed
+
+```
+Access denied for user 'ecommerce_user'@'localhost'
+```
+
+**Solutions:**
+- Verify credentials
+- Check user privileges: `SHOW GRANTS FOR 'ecommerce_user'@'%';`
+- Reset password if needed
+
+### Table Already Exists
+
+If you see "Table 'users' already exists" errors:
+
+```properties
+# Change from update to validate
+spring.jpa.hibernate.ddl-auto=validate
+```
+
+### Character Encoding Issues
+
+Ensure UTF-8 encoding:
+
+```properties
+spring.datasource.url=jdbc:mysql://${SPRING_DATASOURCE_URL}?useUnicode=true&characterEncoding=UTF-8
+```
+
+## AWS RDS Configuration
+
+For AWS RDS MySQL:
+
+```bash
+SPRING_DATASOURCE_URL=mysql://ecommerce.xxxx.us-east-1.rds.amazonaws.com:3306/ecommerce
+```
+
+<Note>
+RDS instances require security group rules to allow inbound traffic on port 3306 from your application servers.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Kafka Integration" icon="layer-group" href="/guides/kafka-integration">
+    Set up event streaming with Kafka
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/deployment">
+    Deploy to production environment
+  </Card>
+</CardGroup>

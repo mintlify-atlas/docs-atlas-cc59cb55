@@ -1,0 +1,77 @@
+---
+title: "Verify Email"
+api: "POST /auth/verify-email"
+description: "Verify user email with token"
+---
+
+Verifies a user's email address using the token sent to their email during registration. The account must be verified before the user can log in.
+
+## Request Body
+
+<ParamField body="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  Verification token sent to the user's email
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message confirming the account has been verified
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash curl
+curl -X POST https://api.example.com/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "token": "123456"
+  }'
+```
+
+```json Response (200 OK)
+{
+  "message": "Cuenta verificada exitosamente. Ya puedes iniciar sesión."
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when:
+  - Request body is null
+  - Email or token is missing
+  - Token is invalid or incorrect
+  
+  ```json
+  {
+    "error": "Solicitud inválida"
+  }
+  ```
+  
+  Or:
+  
+  ```json
+  {
+    "error": "Email o token faltante"
+  }
+  ```
+  
+  Or:
+  
+  ```json
+  {
+    "error": "El token ingresado no es el correcto, intentelo nuevamente"
+  }
+  ```
+</ResponseField>
+
+<Note>
+  After successful verification, the user's account will be activated and they can proceed to log in.
+</Note>

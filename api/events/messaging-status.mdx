@@ -1,0 +1,160 @@
+---
+title: 'Messaging Status'
+description: 'Check backend token and Keycloak client status'
+---
+
+## Get Backend Token Status
+
+<RequestExample>
+```http
+GET /api/messaging/backend-token-status
+```
+</RequestExample>
+
+Returns the current status of backend authentication tokens and Keycloak client configuration. This endpoint is useful for debugging and monitoring the messaging system's authentication state.
+
+### Response
+
+<ResponseField name="configuredBackendTokenPresent" type="boolean">
+  Whether a static backend token is configured in the application properties
+</ResponseField>
+
+<ResponseField name="configuredBackendTokenPreview" type="string">
+  First 8 characters of the configured backend token (if present)
+</ResponseField>
+
+<ResponseField name="backendTokenCached" type="boolean">
+  Whether a backend token is currently cached in memory
+</ResponseField>
+
+<ResponseField name="backendTokenPreview" type="string">
+  First 8 characters of the cached backend token (if present)
+</ResponseField>
+
+<ResponseField name="backendTokenCachedError" type="string">
+  Error message if there was a problem retrieving the cached token
+</ResponseField>
+
+<ResponseField name="keycloakClientAvailable" type="boolean">
+  Whether the Keycloak client is available and able to obtain tokens
+</ResponseField>
+
+<ResponseField name="keycloakAccessTokenPreview" type="string">
+  First 8 characters of the Keycloak access token (if available)
+</ResponseField>
+
+<ResponseField name="keycloakAccessTokenExpiresIn" type="integer">
+  Number of seconds until the Keycloak access token expires
+</ResponseField>
+
+<ResponseField name="keycloakClientError" type="string">
+  Error message if there was a problem with the Keycloak client
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/api/messaging/backend-token-status
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/api/messaging/backend-token-status', {
+  method: 'GET'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/api/messaging/backend-token-status')
+data = response.json()
+print(data)
+```
+</CodeGroup>
+
+### Example Response (All Systems Healthy)
+
+```json
+{
+  "configuredBackendTokenPresent": true,
+  "configuredBackendTokenPreview": "eyJhbGci...",
+  "backendTokenCached": true,
+  "backendTokenPreview": "eyJhbGci...",
+  "keycloakClientAvailable": true,
+  "keycloakAccessTokenPreview": "eyJhbGci...",
+  "keycloakAccessTokenExpiresIn": 3600
+}
+```
+
+### Example Response (No Static Token)
+
+```json
+{
+  "configuredBackendTokenPresent": false,
+  "backendTokenCached": true,
+  "backendTokenPreview": "eyJhbGci...",
+  "keycloakClientAvailable": true,
+  "keycloakAccessTokenPreview": "eyJhbGci...",
+  "keycloakAccessTokenExpiresIn": 3600
+}
+```
+
+### Example Response (With Errors)
+
+```json
+{
+  "configuredBackendTokenPresent": false,
+  "backendTokenCached": false,
+  "backendTokenCachedError": "No token available",
+  "keycloakClientAvailable": false,
+  "keycloakClientError": "Connection refused: Unable to connect to Keycloak server"
+}
+```
+
+---
+
+## Use Cases
+
+### Monitoring
+
+Use this endpoint to monitor the health of the messaging system's authentication:
+
+- Check if tokens are properly configured
+- Verify token caching is working
+- Monitor Keycloak connection status
+- Track token expiration times
+
+### Debugging
+
+When troubleshooting authentication issues:
+
+1. Check if `configuredBackendTokenPresent` is true
+2. Verify `keycloakClientAvailable` is true
+3. Ensure `keycloakAccessTokenExpiresIn` is positive
+4. Review any error messages in the response
+
+### Token Preview
+
+The token previews show only the first 8 characters of each token for security reasons, allowing you to verify tokens are present without exposing sensitive credentials.
+
+---
+
+## Configuration
+
+The backend token can be configured in `application.properties`:
+
+```properties
+messaging.backend-token=your-token-here
+```
+
+Keycloak configuration is also required for client credentials flow. Ensure the following properties are set:
+
+```properties
+keycloak.auth-server-url=https://your-keycloak-server
+keycloak.realm=your-realm
+keycloak.resource=your-client-id
+keycloak.credentials.secret=your-client-secret
+```

@@ -1,0 +1,96 @@
+---
+title: "Login"
+api: "POST /auth/login"
+description: "Authenticate a user and get a bearer token"
+---
+
+Authenticates a user with email and password credentials. Returns a bearer token that must be included in subsequent authenticated requests.
+
+## Request Body
+
+<ParamField body="email" type="string" required>
+  User's email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the login was successful
+</ResponseField>
+
+<ResponseField name="bearer_token" type="string">
+  JWT token for authenticated requests. Include this in the Authorization header as `Bearer {token}`
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  User information object
+  
+  <ResponseField name="id" type="integer">
+    User's unique identifier
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    User's first name
+  </ResponseField>
+  
+  <ResponseField name="lastname" type="string">
+    User's last name
+  </ResponseField>
+  
+  <ResponseField name="email" type="string">
+    User's email address
+  </ResponseField>
+  
+  <ResponseField name="addresses" type="array">
+    List of user's saved addresses
+  </ResponseField>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+```bash curl
+curl -X POST https://api.example.com/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+```json Response (200 OK)
+{
+  "success": true,
+  "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 123,
+    "name": "John",
+    "lastname": "Doe",
+    "email": "user@example.com",
+    "addresses": []
+  }
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when email or password is missing or blank, or when the request body is null.
+  
+  ```json
+  {
+    "success": false,
+    "bearer_token": null,
+    "user": null
+  }
+  ```
+</ResponseField>
+
+<Note>
+  Upon successful login, the user's session is marked as active in the system.
+</Note>

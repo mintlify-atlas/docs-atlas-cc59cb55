@@ -1,0 +1,211 @@
+---
+title: 'Categories'
+description: 'Retrieve and manage product categories'
+---
+
+## Get All Active Categories
+
+<RequestExample>
+```http
+GET /categories
+```
+</RequestExample>
+
+Retrieves all active categories in the system.
+
+### Response
+
+Returns an array of category objects.
+
+<ResponseField name="id" type="long">
+  Category unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Category name
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the category is active
+</ResponseField>
+
+<ResponseField name="categoryCode" type="integer">
+  Optional category code for external system synchronization
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.example.com/categories
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/categories', {
+  method: 'GET'
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.example.com/categories')
+data = response.json()
+print(data)
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Electronics",
+    "active": true,
+    "categoryCode": 100
+  },
+  {
+    "id": 2,
+    "name": "Clothing",
+    "active": true,
+    "categoryCode": 200
+  },
+  {
+    "id": 3,
+    "name": "Home & Garden",
+    "active": true,
+    "categoryCode": 300
+  }
+]
+```
+
+---
+
+## Bulk Add Categories
+
+<RequestExample>
+```http
+POST /categories/bulk
+```
+</RequestExample>
+
+Adds multiple categories at once. This endpoint is used for synchronization with external systems.
+
+### Body Parameters
+
+<ParamField body="categories" type="array" required>
+  Array of category objects to add or update
+</ParamField>
+
+<ParamField body="categories[].name" type="string">
+  Category name (case-insensitive for duplicate checking)
+</ParamField>
+
+<ParamField body="categories[].active" type="boolean">
+  Whether the category is active (defaults to true)
+</ParamField>
+
+<ParamField body="categories[].categoryCode" type="integer">
+  Optional category code
+</ParamField>
+
+### Response
+
+Returns an array of created or existing category objects.
+
+### Behavior Notes
+
+- Duplicate category names (case-insensitive) within the same request are ignored
+- If a category with the same name already exists, the existing category is returned
+- Only one category with a null name can exist in the system
+- Categories with `active: false` and null names are not created
+
+### Example Request
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.example.com/categories/bulk \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "name": "Sports",
+      "active": true,
+      "categoryCode": 400
+    },
+    {
+      "name": "Books",
+      "active": true,
+      "categoryCode": 500
+    }
+  ]'
+```
+
+```javascript JavaScript
+fetch('https://api.example.com/categories/bulk', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify([
+    {
+      name: 'Sports',
+      active: true,
+      categoryCode: 400
+    },
+    {
+      name: 'Books',
+      active: true,
+      categoryCode: 500
+    }
+  ])
+})
+  .then(response => response.json())
+  .then(data => console.log(data));
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "id": 4,
+    "name": "Sports",
+    "active": true,
+    "categoryCode": 400
+  },
+  {
+    "id": 5,
+    "name": "Books",
+    "active": true,
+    "categoryCode": 500
+  }
+]
+```
+
+---
+
+## Disabled Mock Endpoints
+
+<Warning>
+  The following endpoints are disabled and return 501 Not Implemented. Category synchronization should be handled through the Communication/Core API.
+</Warning>
+
+- `GET /categories/sync`
+- `POST /categories/mock/add`
+- `PATCH /categories/mock/activate`
+- `PATCH /categories/mock/deactivate`
+- `PATCH /categories/mock/update`
+
+These endpoints will return:
+
+```json
+{
+  "status": 501,
+  "error": "Not Implemented",
+  "message": "Endpoint mock deshabilitado. Use la API de Comunicación para sincronizar categorías."
+}
+```

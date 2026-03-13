@@ -1,0 +1,283 @@
+---
+title: "Favorite Products"
+api: "POST /products/favourite/{productCode}"
+description: "Manage user's favorite products"
+---
+
+## Add to Favorites
+
+<Note>
+  Requires authentication. Adds a product to the authenticated user's favorites list.
+</Note>
+
+### Endpoint
+
+```
+POST /products/favourite/{productCode}
+```
+
+### Path Parameters
+
+<ParamField path="productCode" type="integer" required>
+  The unique product code to add to favorites
+</ParamField>
+
+### Response
+
+Returns a success message string.
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST "https://api.example.com/products/favourite/10001" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/favourite/10001', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+});
+const message = await response.text();
+```
+
+```python Python
+import requests
+
+headers = {'Authorization': 'Bearer YOUR_TOKEN'}
+
+response = requests.post(
+    'https://api.example.com/products/favourite/10001',
+    headers=headers
+)
+message = response.text
+```
+
+</CodeGroup>
+
+### Example Response
+
+```
+El producto con código 10001 se agregó a favoritos correctamente.
+```
+
+### Error Messages
+
+```
+Usuario no encontrado.
+```
+
+```
+Producto no encontrado.
+```
+
+```
+El producto ya está en favoritos.
+```
+
+---
+
+## Remove from Favorites
+
+<Note>
+  Requires authentication. Removes a product from the authenticated user's favorites list.
+</Note>
+
+### Endpoint
+
+```
+DELETE /products/favourite/{productCode}
+```
+
+### Path Parameters
+
+<ParamField path="productCode" type="integer" required>
+  The unique product code to remove from favorites
+</ParamField>
+
+### Response
+
+Returns a success message string.
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE "https://api.example.com/products/favourite/10001" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/favourite/10001', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+});
+const message = await response.text();
+```
+
+```python Python
+import requests
+
+headers = {'Authorization': 'Bearer YOUR_TOKEN'}
+
+response = requests.delete(
+    'https://api.example.com/products/favourite/10001',
+    headers=headers
+)
+message = response.text
+```
+
+</CodeGroup>
+
+### Example Response
+
+```
+El producto con código 10001 ya no es favorito.
+```
+
+### Error Messages
+
+```
+Usuario no encontrado.
+```
+
+```
+Producto no encontrado.
+```
+
+---
+
+## Get Favorite Products
+
+<Note>
+  Requires authentication. Returns the list of favorite products for the authenticated user.
+</Note>
+
+### Endpoint
+
+```
+GET /products/user/favourite-products
+```
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+### Response
+
+Returns an array of favorite product objects.
+
+<ResponseField name="favorites" type="array">
+  Array of favorite products
+  
+  <ResponseField name="id" type="integer">
+    Product ID
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Product title
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Product description
+  </ResponseField>
+  
+  <ResponseField name="mediaSrc" type="array">
+    Array of image URLs
+  </ResponseField>
+  
+  <ResponseField name="price" type="float">
+    Product price
+  </ResponseField>
+  
+  <ResponseField name="stock" type="integer">
+    Available stock
+  </ResponseField>
+  
+  <ResponseField name="productCode" type="integer">
+    Unique product code
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "https://api.example.com/products/user/favourite-products" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.example.com/products/user/favourite-products', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN'
+  }
+});
+const favorites = await response.json();
+```
+
+```python Python
+import requests
+
+headers = {'Authorization': 'Bearer YOUR_TOKEN'}
+
+response = requests.get(
+    'https://api.example.com/products/user/favourite-products',
+    headers=headers
+)
+favorites = response.json()
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "title": "Wireless Headphones",
+    "description": "High-quality wireless headphones with noise cancellation",
+    "mediaSrc": [
+      "https://example.com/images/headphones-1.jpg",
+      "https://example.com/images/headphones-2.jpg"
+    ],
+    "price": 299.99,
+    "stock": 50,
+    "productCode": 10001
+  },
+  {
+    "id": 5,
+    "title": "Bluetooth Speaker",
+    "description": "Portable Bluetooth speaker with 360° sound",
+    "mediaSrc": [
+      "https://example.com/images/speaker-1.jpg"
+    ],
+    "price": 149.99,
+    "stock": 75,
+    "productCode": 10005
+  }
+]
+```
+
+## Notes
+
+- All favorite endpoints require authentication
+- Users can add the same product to favorites only once
+- Only active products are included in the favorites list
+- Removing a favorite product that doesn't exist in favorites will still return success
+- Favorite actions emit events to the Communication API (Core) system:
+  - `emitAddFavorite` when adding to favorites
+  - `emitRemoveFavorite` when removing from favorites
+- The `GET /products/user/favourite-products` endpoint extracts the user email from the JWT token in the Authorization header

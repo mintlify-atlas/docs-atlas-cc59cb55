@@ -1,0 +1,187 @@
+---
+title: "Search Products"
+api: "GET /products/search"
+description: "Search products by title with synonym support"
+---
+
+## Overview
+
+This endpoint provides full-text search functionality for products, including support for synonyms. It searches product titles and matches against configured synonyms.
+
+## Query Parameters
+
+<ParamField query="query" type="string" required>
+  Search query string to match against product titles
+</ParamField>
+
+## Response
+
+Returns an array of Product objects matching the search query.
+
+<ResponseField name="products" type="array">
+  Array of matching products
+  
+  <ResponseField name="id" type="integer">
+    Product unique identifier
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Product title/name
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Product description
+  </ResponseField>
+  
+  <ResponseField name="price" type="float">
+    Product price
+  </ResponseField>
+  
+  <ResponseField name="stock" type="integer">
+    Available stock quantity
+  </ResponseField>
+  
+  <ResponseField name="mediaSrc" type="array">
+    Array of image URLs
+  </ResponseField>
+  
+  <ResponseField name="productCode" type="integer">
+    Unique product code
+  </ResponseField>
+  
+  <ResponseField name="calification" type="float">
+    Average rating
+  </ResponseField>
+  
+  <ResponseField name="brand" type="object">
+    Brand information
+  </ResponseField>
+  
+  <ResponseField name="categories" type="array">
+    Array of category objects
+  </ResponseField>
+  
+  <ResponseField name="active" type="boolean">
+    Product active status
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET "https://api.example.com/products/search?query=headphones" \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const query = 'headphones';
+const response = await fetch(
+  `https://api.example.com/products/search?query=${encodeURIComponent(query)}`,
+  {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  }
+);
+const products = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.example.com/products/search',
+    params={'query': 'headphones'}
+)
+products = response.json()
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+[
+  {
+    "id": 1,
+    "title": "Wireless Headphones",
+    "description": "High-quality wireless headphones with noise cancellation",
+    "price": 299.99,
+    "stock": 50,
+    "mediaSrc": [
+      "https://example.com/images/headphones-1.jpg"
+    ],
+    "productCode": 10001,
+    "calification": 4.5,
+    "brand": {
+      "id": 1,
+      "name": "AudioTech",
+      "active": true
+    },
+    "categories": [
+      {
+        "id": 2,
+        "name": "Audio",
+        "active": true
+      }
+    ],
+    "active": true
+  },
+  {
+    "id": 5,
+    "title": "Studio Headphones Pro",
+    "description": "Professional studio headphones",
+    "price": 399.99,
+    "stock": 25,
+    "mediaSrc": [
+      "https://example.com/images/studio-headphones.jpg"
+    ],
+    "productCode": 10005,
+    "calification": 4.8,
+    "brand": {
+      "id": 2,
+      "name": "ProAudio",
+      "active": true
+    },
+    "active": true
+  }
+]
+```
+
+## Search Behavior
+
+### Case-Insensitive Matching
+The search is case-insensitive. Searching for "Headphones", "headphones", or "HEADPHONES" will return the same results.
+
+### Partial Match
+The search performs a substring match on product titles. For example:
+- Query: "phone" will match "Wireless Headphones", "Smartphone", "Phone Case"
+
+### Synonym Support
+The endpoint supports synonyms loaded from `synonyms.json`. If your query matches a synonym key, products containing any of the related terms will be returned.
+
+Example synonym configuration:
+```json
+{
+  "audio": ["headphones", "speaker", "earbuds"],
+  "tech": ["electronics", "gadget", "device"]
+}
+```
+
+Searching for "audio" would match products with "headphones", "speaker", or "earbuds" in their titles.
+
+## Filtering
+
+- Only **active products** (`active=true`) are returned
+- Products must have a non-null `title` field
+- Results are not paginated (returns all matches)
+
+## Notes
+
+- The query parameter is required
+- Empty or whitespace-only queries will return no results
+- Search results are not sorted by relevance (returns in database order)
+- For paginated or sorted results, consider using the filter endpoint with search results

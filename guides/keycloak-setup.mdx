@@ -1,0 +1,460 @@
+---
+title: Keycloak Setup
+description: Configure Keycloak identity provider for OAuth2/OpenID Connect authentication with service account credentials
+---
+
+The Ecommerce Backend API uses Keycloak for OAuth2/OpenID Connect authentication. This guide covers Keycloak installation, realm configuration, and client setup for service-to-service authentication.
+
+## Overview
+
+The application uses Keycloak for:
+- **Service Account authentication** (Client Credentials flow)
+- **Bearer token** validation and propagation
+- **Machine-to-machine** communication with middleware
+
+Authentication method: **Client Credentials Grant** (OAuth2)
+
+## Keycloak Installation
+
+<Steps>
+
+<Step title="Install with Docker Compose">
+
+The project includes a pre-configured `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.4
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_IMPORT: /opt/keycloak/data/import/realm-export.json
+    command: ["start-dev"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/ecommerce"]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+```
+
+</Step>
+
+<Step title="Start Keycloak">
+
+From the project root:
+
+```bash
+docker-compose up -d keycloak
+```
+
+Wait for Keycloak to be ready:
+
+```bash
+docker-compose logs -f keycloak
+```
+
+Look for:
+```
+Keycloak 24.0.4 started
+```
+
+</Step>
+
+<Step title="Access Keycloak Console">
+
+Open your browser to:
+
+```
+http://localhost:8080
+```
+
+Login with admin credentials:
+- **Username:** `admin`
+- **Password:** `admin`
+
+</Step>
+
+</Steps>
+
+## Realm Configuration
+
+### Pre-configured Realm
+
+The application includes a realm export file at `docker/keycloak/realm-export.json`:
+
+```json
+{
+  "realm": "ecommerce",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "ecommerce-module",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ecommerce-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["*"],
+      "webOrigins": ["+"]
+    }
+  ]
+}
+```
+
+This configuration:
+- Creates the `ecommerce` realm
+- Sets up `ecommerce-module` client
+- Enables service account (client credentials)
+- Disables user authentication flows
+
+<Note>
+The realm is automatically imported when Keycloak starts via the `KC_IMPORT` environment variable.
+</Note>
+
+### Manual Realm Creation
+
+If you need to create the realm manually:
+
+<Steps>
+
+<Step title="Create Realm">
+
+1. Click **Add Realm** dropdown (top-left)
+2. Enter name: `ecommerce`
+3. Click **Create**
+
+</Step>
+
+<Step title="Create Client">
+
+1. Navigate to **Clients** → **Create**
+2. Set **Client ID**: `ecommerce-module`
+3. Set **Client Protocol**: `openid-connect`
+4. Click **Save**
+
+</Step>
+
+<Step title="Configure Client">
+
+In the client settings:
+
+1. **Access Type**: `confidential`
+2. **Service Accounts Enabled**: `ON`
+3. **Standard Flow Enabled**: `OFF`
+4. **Direct Access Grants Enabled**: `OFF`
+5. Click **Save**
+
+</Step>
+
+<Step title="Get Client Secret">
+
+1. Go to **Credentials** tab
+2. Copy the **Secret** value
+3. This is your `KEYCLOAK_CLIENT_SECRET`
+
+</Step>
+
+</Steps>
+
+## Application Configuration
+
+### Environment Variables
+
+Set the Keycloak configuration:
+
+```bash
+export KEYCLOAK_TOKEN_URL="http://localhost:8080/realms/ecommerce/protocol/openid-connect/token"
+export KEYCLOAK_CLIENT_SECRET="ecommerce-secret"
+```
+
+Or add to `.env`:
+
+```bash
+KEYCLOAK_TOKEN_URL=http://localhost:8080/realms/ecommerce/protocol/openid-connect/token
+KEYCLOAK_CLIENT_SECRET=ecommerce-secret
+```
+
+### Application Properties
+
+```properties
+keycloak.token.url=${KEYCLOAK_TOKEN_URL:http://localhost:8080/realms/ecommerce/protocol/openid-connect/token}
+keycloak.client-id=ventas-app
+keycloak.client-secret=${KEYCLOAK_CLIENT_SECRET}
+keycloak.refresh.enabled=false
+```
+
+**Configuration Details:**
+- `token.url`: OpenID Connect token endpoint
+- `client-id`: Application identifier (can differ from Keycloak client ID)
+- `client-secret`: Confidential client secret
+- `refresh.enabled=false`: Disable automatic token refresh
+
+<Note>
+The application uses `ventas-app` as the application client ID, which authenticates against the `ecommerce-module` Keycloak client using the shared secret.
+</Note>
+
+## Token Endpoint
+
+### Endpoint Format
+
+The token endpoint follows OpenID Connect standard:
+
+```
+http://{keycloak-host}:{port}/realms/{realm-name}/protocol/openid-connect/token
+```
+
+For the default configuration:
+```
+http://localhost:8080/realms/ecommerce/protocol/openid-connect/token
+```
+
+### Obtaining Access Token
+
+Test the token endpoint manually:
+
+```bash
+curl -X POST http://localhost:8080/realms/ecommerce/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=ecommerce-module" \
+  -d "client_secret=ecommerce-secret"
+```
+
+Expected response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in": 300,
+  "refresh_expires_in": 0,
+  "token_type": "Bearer",
+  "not-before-policy": 0,
+  "scope": "profile email"
+}
+```
+
+### Token Usage
+
+The application automatically:
+1. Requests tokens from Keycloak on startup
+2. Includes tokens in `Authorization: Bearer {token}` headers
+3. Uses tokens for middleware API calls
+
+## Bearer Token Interceptor
+
+The application uses a `BearerTokenInterceptor` to automatically attach tokens to outgoing requests:
+
+```java
+@Component
+public class BearerTokenInterceptor implements ClientHttpRequestInterceptor {
+    @Override
+    public ClientHttpResponse intercept(HttpRequest request, byte[] body, 
+                                         ClientHttpRequestExecution execution) {
+        String token = keycloakClient.getAccessToken();
+        request.getHeaders().set("Authorization", "Bearer " + token);
+        return execution.execute(request, body);
+    }
+}
+```
+
+This interceptor is registered with `RestTemplate`:
+
+```java
+@Bean
+public RestTemplate restTemplate(BearerTokenInterceptor interceptor) {
+    RestTemplate restTemplate = new RestTemplate();
+    restTemplate.setInterceptors(List.of(interceptor));
+    return restTemplate;
+}
+```
+
+## Service Account Roles
+
+### Assign Roles (Optional)
+
+If your middleware requires specific roles:
+
+<Steps>
+
+<Step title="Create Roles">
+
+1. Go to **Realm Roles**
+2. Click **Add Role**
+3. Create roles like `event-publisher`, `event-consumer`
+
+</Step>
+
+<Step title="Assign to Service Account">
+
+1. Go to **Clients** → `ecommerce-module`
+2. Select **Service Account Roles** tab
+3. Assign required roles
+
+</Step>
+
+</Steps>
+
+## Production Configuration
+
+### External Keycloak URL
+
+For production deployments:
+
+```bash
+KEYCLOAK_TOKEN_URL=https://keycloak.example.com/realms/ecommerce/protocol/openid-connect/token
+```
+
+### Secure Client Secret
+
+<Warning>
+Never commit client secrets to version control. Use environment variables or secret management systems.
+</Warning>
+
+Recommended secret managers:
+- AWS Secrets Manager
+- HashiCorp Vault
+- Kubernetes Secrets
+
+Example with AWS Secrets Manager:
+
+```bash
+export KEYCLOAK_CLIENT_SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id ecommerce/keycloak-secret \
+  --query SecretString --output text)
+```
+
+### HTTPS Configuration
+
+For production, use HTTPS:
+
+```yaml
+keycloak:
+  image: quay.io/keycloak/keycloak:24.0.4
+  command: ["start", "--hostname=keycloak.example.com", "--https-certificate-file=/etc/x509/https/tls.crt", "--https-certificate-key-file=/etc/x509/https/tls.key"]
+```
+
+### High Availability
+
+For HA deployments:
+- Use external PostgreSQL database
+- Run multiple Keycloak instances
+- Configure shared cache (Infinispan)
+
+```yaml
+keycloak:
+  environment:
+    KC_DB: postgres
+    KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+    KC_DB_USERNAME: keycloak
+    KC_DB_PASSWORD: password
+    KC_CACHE: ispn
+    KC_CACHE_STACK: kubernetes
+```
+
+## Troubleshooting
+
+### Invalid Client Credentials
+
+```
+{"error":"invalid_client","error_description":"Invalid client credentials"}
+```
+
+**Solutions:**
+1. Verify client secret matches Keycloak configuration
+2. Check client ID is correct
+3. Ensure service account is enabled
+
+### Token Endpoint Not Found
+
+```
+Could not resolve host: keycloak
+```
+
+**Solutions:**
+1. Verify Keycloak is running: `docker ps | grep keycloak`
+2. Check network connectivity
+3. Ensure correct URL format with realm name
+
+### Realm Not Found
+
+```
+{"error":"Realm does not exist"}
+```
+
+**Solutions:**
+1. Check realm name in URL matches created realm
+2. Verify realm export imported successfully
+3. Create realm manually if needed
+
+### Token Expired
+
+```
+{"error":"invalid_token","error_description":"Token expired"}
+```
+
+**Solutions:**
+- The application should automatically handle token refresh
+- Check `keycloak.refresh.enabled` setting
+- Verify token expiration time in Keycloak realm settings
+
+## Monitoring and Logs
+
+### Keycloak Logs
+
+```bash
+docker-compose logs -f keycloak
+```
+
+### Enable Keycloak Debug Logging
+
+```yaml
+keycloak:
+  environment:
+    KC_LOG_LEVEL: DEBUG
+    QUARKUS_LOG_CATEGORY_"org.keycloak.events"_LEVEL: DEBUG
+```
+
+### Application Keycloak Logging
+
+```properties
+logging.level.ar.edu.uade.ecommerce.security=DEBUG
+logging.level.org.keycloak=DEBUG
+```
+
+## Health Check
+
+Verify Keycloak realm is accessible:
+
+```bash
+curl http://localhost:8080/realms/ecommerce
+```
+
+Response:
+```json
+{
+  "realm": "ecommerce",
+  "public_key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...",
+  "token-service": "http://localhost:8080/realms/ecommerce/protocol/openid-connect",
+  "account-service": "http://localhost:8080/realms/ecommerce/account"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Review all configuration options
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/guides/deployment">
+    Deploy the complete stack
+  </Card>
+</CardGroup>
