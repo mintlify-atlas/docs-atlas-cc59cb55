@@ -1,0 +1,147 @@
+{
+  "projectType": "api-service",
+  "projectName": "Ecommerce Backend",
+  "projectDescription": "Spring Boot e-commerce backend API with product catalog, shopping cart, order management, and event-driven integration via Kafka.",
+  "theme": "mint",
+  "primaryColor": "#3B82F6",
+  "lightColor": "#60A5FA",
+  "darkColor": "#1E40AF",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/authentication",
+              "concepts/event-driven"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/configuration",
+              "guides/database-setup",
+              "guides/kafka-integration",
+              "guides/keycloak-setup",
+              "guides/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/register",
+              "api/auth/verify-email",
+              "api/auth/logout",
+              "api/auth/password-reset"
+            ]
+          },
+          {
+            "group": "Products",
+            "pages": [
+              "api/products/list",
+              "api/products/get",
+              "api/products/filter",
+              "api/products/search",
+              "api/products/reviews",
+              "api/products/favorites"
+            ]
+          },
+          {
+            "group": "Shopping Cart",
+            "pages": [
+              "api/cart/get",
+              "api/cart/add-item",
+              "api/cart/update-item",
+              "api/cart/remove-item"
+            ]
+          },
+          {
+            "group": "Orders",
+            "pages": [
+              "api/orders/create",
+              "api/orders/list",
+              "api/orders/get",
+              "api/orders/cancel"
+            ]
+          },
+          {
+            "group": "User Management",
+            "pages": [
+              "api/users/profile",
+              "api/users/addresses",
+              "api/users/update"
+            ]
+          },
+          {
+            "group": "Categories & Brands",
+            "pages": [
+              "api/categories/list",
+              "api/brands/list"
+            ]
+          },
+          {
+            "group": "Events",
+            "pages": [
+              "api/events/overview",
+              "api/events/messaging-status"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "User authentication and registration with email verification",
+    "Product catalog with filtering, search, and reviews",
+    "Shopping cart and order management",
+    "Event-driven architecture with Kafka integration",
+    "Keycloak integration for backend authentication",
+    "Product favorites and recommendations",
+    "Email notifications via SMTP",
+    "Event idempotency and retry mechanisms"
+  ],
+  "publicApiSurface": [
+    "POST /auth/login - User login",
+    "POST /auth/register - User registration",
+    "POST /auth/verify-email - Email verification",
+    "POST /auth/logout - User logout",
+    "GET /products - List products with pagination",
+    "GET /products/{id} - Get product details with related products",
+    "POST /products/filter - Filter products by category, brand, price",
+    "GET /products/search - Search products by query",
+    "POST /products/code/{productCode}/review - Add product review",
+    "POST /products/favourite/{productCode} - Add product to favorites",
+    "DELETE /products/favourite/{productCode} - Remove product from favorites",
+    "GET /cart - Get user's shopping cart",
+    "POST /cart/item - Add item to cart",
+    "PATCH /cart/item/{id} - Update cart item quantity",
+    "DELETE /cart/item/{id} - Remove item from cart",
+    "POST /purchase - Create new purchase order",
+    "GET /purchase - List user purchases",
+    "GET /purchase/{id} - Get purchase details",
+    "PATCH /purchase/cancel/{id} - Cancel purchase",
+    "GET /users/profile - Get user profile",
+    "PATCH /users/profile - Update user profile",
+    "GET /users/addresses - Get user addresses",
+    "POST /users/addresses - Add new address",
+    "GET /categories - List all categories",
+    "GET /brands - List all brands"
+  ]
+}
